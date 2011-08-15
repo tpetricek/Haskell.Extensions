@@ -4,4 +4,7 @@ import {-# SOURCE #-} TypeRep( Type )
 
 noParenPred :: Type -> Bool
 isPredTy :: Type -> Bool
+
+type Kind = Type
+typeKind :: Type -> Kind
 \end{code}

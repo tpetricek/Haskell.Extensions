@@ -58,7 +58,7 @@ module TysWiredIn (
 	parrTyCon_RDR, parrTyConName,
 
         -- * Implicit parameters DataCon (TyCon is in TysPrim)
-        ipDataCon
+        ipTyCon, ipDataCon
     ) where
 
 #include "HsVersions.h"
@@ -139,9 +139,9 @@ mkWiredInDataConName built_in modu fs unique datacon
 		  (ADataCon datacon)	-- Relevant DataCon
 		  built_in
 
-eqTyConName, eqLiftedDataConName :: Name
-eqTyConName         = mkWiredInTyConName   UserSyntax gHC_TYPES (fsLit "~") eqTyConKey eqTyCon
-eqLiftedDataConName = mkWiredInDataConName UserSyntax gHC_TYPES (fsLit "~") eqLiftedDataConKey
+eqTyConName, eqBoxDataConName :: Name
+eqTyConName      = mkWiredInTyConName   UserSyntax gHC_TYPES (fsLit "~") eqTyConKey eqTyCon
+eqBoxDataConName = mkWiredInDataConName UserSyntax gHC_TYPES (fsLit "EqBox") eqBoxDataConKey
 
 charTyConName, charDataConName, intTyConName, intDataConName :: Name
 charTyConName	  = mkWiredInTyConName   UserSyntax gHC_TYPES (fsLit "Char") charTyConKey charTyCon
@@ -318,15 +318,43 @@ unboxedPairDataCon = tupleCon   Unboxed 2
 %************************************************************************
 
 \begin{code}
--- ipTyCon is in TysPrim
+-- We have a big hack here to make sure that we get implicit parameter
+-- TyCon/DataCons which always have the same Uniques within one run of the
+-- compiler. We reserve the 'P'  mask for our uniques, and set the integer
+-- part to a hash of the name of the parameter.
+mkIPUnique :: IPName Name -> (OccName -> OccName) -> Unique
+mkIPUnique n f = mkMaskedUniqueGrimily 'P' (uniqueOfFS (occNameFS (f (nameOccName (ipNameName n)))))
+
+-- I would kind of like to use a newtype TyCon here, but I imagine that
+-- that would cause problems because the corresponding coercion axiom would
+-- coerce between types of different kinds (Fact and *)..
+--
+-- Do it this way for now.
+ipTyCon :: IPName Name -> TyCon
+ipTyCon = fst . ipTyDataCon
 
 ipDataCon :: IPName Name -> DataCon
-ipDataCon n = datacon
+ipDataCon = snd . ipTyDataCon
+
+ipTyDataCon :: IPName Name -> (TyCon, DataCon)
+ipTyDataCon n = (tycon, datacon)
   where
     -- Reuse the OccName generation for classes for now. May want to revisit this.
+    tycon_u    = mkIPUnique n mkClassTyConOcc
     datacon_u    = mkIPUnique n mkClassDataConOcc
+    
+    tycon_name = mkPrimTc (fsLit ("?" ++ getOccString (ipNameName n))) tycon_u tycon
+    tycon      = mkAlgTyCon tycon_name
+                   (liftedTypeKind `mkArrowKind` factKind)
+                   [alphaTyVar]
+                   []      -- No stupid theta
+                   (DataTyCon [datacon] False)
+                   (IPTyCon n)
+                   NonRecursive
+                   False
+
     datacon_name = mkWiredInDataConName UserSyntax gHC_TYPES (fsLit "IPBox") datacon_u datacon
-    datacon      = pcDataCon datacon_name [alphaTyVar] [mkTyVarTy alphaTyVar] (ipTyCon n)
+    datacon      = pcDataCon datacon_name [alphaTyVar] [mkTyVarTy alphaTyVar] tycon
 \end{code}
 
 %************************************************************************
@@ -341,13 +369,13 @@ eqTyCon = mkAlgTyCon eqTyConName
             (mkArrowKinds [openTypeKind, openTypeKind] factKind)
             [alphaTyVar, betaTyVar]
             []      -- No stupid theta
-            (DataTyCon [eqLiftedDataCon] False)
+            (DataTyCon [eqBoxDataCon] False)
             NoParentTyCon
             NonRecursive
             False
     
-eqLiftedDataCon :: DataCon
-eqLiftedDataCon = pcDataCon eqLiftedDataConName [alphaTyVar, betaTyVar] (mkTyConVarApps eqPredPrimTyCon [alphaTyVar, betaTyVar]) eqTyCon
+eqBoxDataCon :: DataCon
+eqBoxDataCon = pcDataCon eqBoxDataConName [alphaTyVar, betaTyVar] (mkTyConVarApps eqPrimTyCon [alphaTyVar, betaTyVar]) eqTyCon
 \end{code}
 
 \begin{code}

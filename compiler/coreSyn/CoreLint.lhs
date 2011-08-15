@@ -339,7 +339,7 @@ lintCoreExpr (Type ty)
 lintCoreExpr (Coercion co)
   = do { co' <- lintInCo co
        ; let Pair ty1 ty2 = coercionKind co'
-       ; return (mkTyConApp eqPredPrimTyCon [ty1, ty2] }
+       ; return (mkTyConApp eqPrimTyCon [ty1, ty2] }
 \end{code}
 
 %************************************************************************
@@ -716,7 +716,7 @@ lintType ty@(FunTy t1 t2)
   = lint_ty_app ty (tyConKind funTyCon) [t1,t2]
 
 lintType ty@(TyConApp tc tys)
-  | tc `hasKey` eqPredPrimTyConKey	-- See Note [The Eq# TyCon] in TysPrim
+  | tc `hasKey` eqPrimTyConKey	-- See Note [The Eq# TyCon] in TysPrim
   = lint_prim_eq_pred ty tys
   | tc `hasKey` eqPredTyConKey
   = lint_eq_pred ty tys

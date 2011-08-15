@@ -14,7 +14,6 @@ import CoreSyn
 import HscTypes	
 import TyCon
 -- import Class
--- import TysPrim( eqPredPrimTyCon )
 import TypeRep
 import Type
 import PprExternalCore () -- Instances

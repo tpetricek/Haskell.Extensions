@@ -128,6 +128,7 @@ module Type (
 -- We import the representation and primitive functions from TypeRep.
 -- Many things are reexported, but not the representation!
 
+import Kind    ( kindAppResult, kindFunResult, isTySuperKind, isSubOpenTypeKind )
 import TypeRep
 
 -- friends:
@@ -138,7 +139,8 @@ import VarSet
 import Class
 import TyCon
 import TysPrim
-import PrelNames	( eqTyConKey, eqPredPrimTyConKey )
+import {-# SOURCE #-} TysWiredIn ( eqTyCon, ipTyCon )
+import PrelNames	         ( eqTyConKey, eqPrimTyConKey )
 
 -- others
 import Unique		( Unique, hasKey )
@@ -780,7 +782,7 @@ Make PredTypes
 isCertainlyPredReprTy :: Type -> Bool
 isCertainlyPredReprTy ty | Just ty' <- coreView ty = isCertainlyPredReprTy ty'
 isCertainlyPredReprTy ty = case tyConAppTyCon_maybe ty of
-	Just tc -> tc `hasKey` eqPredPrimTyConKey || isClassTyCon tc
+	Just tc -> tc `hasKey` eqPrimTyConKey || isClassTyCon tc
 	Nothing -> False
 
 isPredTy :: Type -> Bool
@@ -790,11 +792,11 @@ isPredTy ty = typeKind ty `eqKind` factKind
 --------------------- Equality types ---------------------------------
 \begin{code}
 -- | Creates a type equality predicate
-mkLiftedEqPred :: (Type, Type) -> PredType
-mkLiftedEqPred (ty1, ty2) = TyConApp eqTyCon [ty1, ty2]
+mkEqPred :: (Type, Type) -> PredType
+mkEqPred (ty1, ty2) = TyConApp eqTyCon [ty1, ty2]
 
-mkPrimEqPred :: (Type, Type) -> Type
-mkPrimEqPred (ty1, ty2) = TyConApp eqPrimTyCon [ty1, ty2]
+mkPrimEqType :: (Type, Type) -> Type
+mkPrimEqType (ty1, ty2) = TyConApp eqPrimTyCon [ty1, ty2]
 \end{code}
 
 --------------------- Implicit parameters ---------------------------------
@@ -1395,6 +1397,50 @@ type KindVar = TyVar  -- invariant: KindVar will always be a
 -- kind var constructors and functions are in TcType
 
 type SimpleKind = Kind
+\end{code}
+
+%************************************************************************
+%*                                                                      *
+        The kind of a type
+%*                                                                      *
+%************************************************************************
+
+\begin{code}
+theBy :: (a -> a -> Bool) -> [a] -> Maybe a
+theBy _  []     = error "the: must supply at least one argument"
+theBy eq (x:xs) = go x xs
+  where go x []     = Just x
+        go x (y:ys) | x `eq` y  = go x ys
+                    | otherwise = Nothing
+
+typeKind :: Type -> Kind
+typeKind ty@(TyConApp tc tys) 
+  | isTupleTyCon tc
+  , tyConArity tc == length tys
+  = case theBy eqKind (map typeKind tys) of
+      Just k  -> k
+      Nothing -> pprPanic "typeKind: insane tuple kinds" (ppr ty)
+
+  | otherwise
+  = ASSERT2( not (tc `hasKey` eqPrimTyConKey) || length tys == 2, ppr ty )
+             -- Assertion checks for unsaturated application of Eq#
+             -- See Note [The Eq# TyCon] in TysPrim
+    kindAppResult (tyConKind tc) tys
+
+typeKind (AppTy fun _)        = kindFunResult (typeKind fun)
+typeKind (ForAllTy _ ty)      = typeKind ty
+typeKind (TyVarTy tyvar)      = tyVarKind tyvar
+typeKind (FunTy _arg res)
+    -- Hack alert.  The kind of (Int -> Int#) is liftedTypeKind (*), 
+    --              not unliftedTypKind (#)
+    -- The only things that can be after a function arrow are
+    --   (a) types (of kind openTypeKind or its sub-kinds)
+    --   (b) kinds (of super-kind TY) (e.g. * -> (* -> *))
+    | isTySuperKind k         = k
+    | otherwise               = ASSERT( isSubOpenTypeKind k) liftedTypeKind 
+    where
+      k = typeKind res
+
 \end{code}
 
 Kind inference

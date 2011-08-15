@@ -9,7 +9,9 @@
 -- | This module defines TyCons that can't be expressed in Haskell. 
 --   They are all, therefore, wired-in TyCons.  C.f module TysWiredIn
 module TysPrim(
-	alphaTyVars, betaTyVars, alphaTyVar, betaTyVar, gammaTyVar, deltaTyVar,
+	mkPrimTc, -- For implicit parameters in TysWiredIn only
+
+        alphaTyVars, betaTyVars, alphaTyVar, betaTyVar, gammaTyVar, deltaTyVar,
 	alphaTy, betaTy, gammaTy, deltaTy,
 	openAlphaTy, openBetaTy, openAlphaTyVar, openBetaTyVar, openAlphaTyVars,
         argAlphaTy, argAlphaTyVar, argBetaTy, argBetaTyVar,
@@ -62,10 +64,7 @@ module TysPrim(
 	int64PrimTyCon,		int64PrimTy,
         word64PrimTyCon,        word64PrimTy,
 
-        eqPredPrimTyCon,            -- ty1 ~ ty2
-
-        -- * Implicit parameters
-        mkIPUnique, ipTyCon,
+        eqPrimTyCon,            -- Eq# ty1 ty2
 
 	-- * Any
 	anyTyCon, anyTyConOfKind, anyTypeOfKind
@@ -73,17 +72,13 @@ module TysPrim(
 
 #include "HsVersions.h"
 
-import {-# SOURCE #-} TysWiredIn (ipDataCon)
-
 import Var		( TyVar, mkTyVar )
-import Name		( Name, BuiltInSyntax(..), mkInternalName, mkWiredInName, nameOccName, getOccString )
-import OccName          ( OccName, mkTcOcc,mkTyVarOccFS, mkTcOccFS, occNameFS, mkClassTyConOcc )
+import Name		( Name, BuiltInSyntax(..), mkInternalName, mkWiredInName )
+import OccName          ( mkTcOcc,mkTyVarOccFS, mkTcOccFS )
 import TyCon
 import TypeRep
 import SrcLoc
 import Unique		( mkAlphaTyVarUnique )
-import UniqSupply       ( mkMaskedUniqueGrimily )
-import BasicTypes       ( IPName(..), ipNameName, RecFlag(NonRecursive) )
 import PrelNames
 import FastString
 import Outputable
@@ -125,7 +120,7 @@ primTyCons
     , word32PrimTyCon
     , word64PrimTyCon
     , anyTyCon
-    , eqPredPrimTyCon
+    , eqPrimTyCon
     ]
 
 mkPrimTc :: FastString -> Unique -> TyCon -> Name
@@ -135,7 +130,7 @@ mkPrimTc fs unique tycon
 		  (ATyCon tycon)	-- Relevant TyCon
 		  UserSyntax		-- None are built-in syntax
 
-charPrimTyConName, intPrimTyConName, int32PrimTyConName, int64PrimTyConName, wordPrimTyConName, word32PrimTyConName, word64PrimTyConName, addrPrimTyConName, floatPrimTyConName, doublePrimTyConName, statePrimTyConName, realWorldTyConName, arrayPrimTyConName, byteArrayPrimTyConName, mutableArrayPrimTyConName, mutableByteArrayPrimTyConName, mutVarPrimTyConName, mVarPrimTyConName, tVarPrimTyConName, stablePtrPrimTyConName, stableNamePrimTyConName, bcoPrimTyConName, weakPrimTyConName, threadIdPrimTyConName, eqPredPrimTyConName :: Name
+charPrimTyConName, intPrimTyConName, int32PrimTyConName, int64PrimTyConName, wordPrimTyConName, word32PrimTyConName, word64PrimTyConName, addrPrimTyConName, floatPrimTyConName, doublePrimTyConName, statePrimTyConName, realWorldTyConName, arrayPrimTyConName, byteArrayPrimTyConName, mutableArrayPrimTyConName, mutableByteArrayPrimTyConName, mutVarPrimTyConName, mVarPrimTyConName, tVarPrimTyConName, stablePtrPrimTyConName, stableNamePrimTyConName, bcoPrimTyConName, weakPrimTyConName, threadIdPrimTyConName, eqPrimTyConName :: Name
 charPrimTyConName    	      = mkPrimTc (fsLit "Char#") charPrimTyConKey charPrimTyCon
 intPrimTyConName     	      = mkPrimTc (fsLit "Int#") intPrimTyConKey  intPrimTyCon
 int32PrimTyConName	      = mkPrimTc (fsLit "Int32#") int32PrimTyConKey int32PrimTyCon
@@ -147,7 +142,7 @@ addrPrimTyConName    	      = mkPrimTc (fsLit "Addr#") addrPrimTyConKey addrPrim
 floatPrimTyConName   	      = mkPrimTc (fsLit "Float#") floatPrimTyConKey floatPrimTyCon
 doublePrimTyConName  	      = mkPrimTc (fsLit "Double#") doublePrimTyConKey doublePrimTyCon
 statePrimTyConName            = mkPrimTc (fsLit "State#") statePrimTyConKey statePrimTyCon
-eqPredPrimTyConName           = mkPrimTc (fsLit "Eq#") eqPredPrimTyConKey eqPredPrimTyCon
+eqPrimTyConName               = mkPrimTc (fsLit "Eq#") eqPrimTyConKey eqPrimTyCon
 realWorldTyConName            = mkPrimTc (fsLit "RealWorld") realWorldTyConKey realWorldTyCon
 arrayPrimTyConName   	      = mkPrimTc (fsLit "Array#") arrayPrimTyConKey arrayPrimTyCon
 byteArrayPrimTyConName	      = mkPrimTc (fsLit "ByteArray#") byteArrayPrimTyConKey byteArrayPrimTyCon
@@ -424,9 +419,9 @@ mkStatePrimTy ty = mkTyConApp statePrimTyCon [ty]
 statePrimTyCon :: TyCon   -- See Note [The State# TyCon]
 statePrimTyCon	 = pcPrimTyCon statePrimTyConName 1 VoidRep
 
-eqPredPrimTyCon :: TyCon  -- The representation type for equality predicates
-		   	  -- See Note [The (Eq#) TyCon]
-eqPredPrimTyCon  = pcPrimTyCon eqPredPrimTyConName 2 VoidRep
+eqPrimTyCon :: TyCon  -- The representation type for equality predicates
+		      -- See Note [The (Eq#) TyCon]
+eqPrimTyCon  = pcPrimTyCon eqPrimTyConName 2 VoidRep
 \end{code}
 
 RealWorld is deeply magical.  It is *primitive*, but it is not
@@ -586,41 +581,6 @@ threadIdPrimTy :: Type
 threadIdPrimTy    = mkTyConTy threadIdPrimTyCon
 threadIdPrimTyCon :: TyCon
 threadIdPrimTyCon = pcPrimTyCon0 threadIdPrimTyConName PtrRep
-\end{code}
-
-Implicit parameters
-
-\begin{code}
--- We have a big hack here to make sure that we get implicit parameter
--- TyCon/DataCons which always have the same Uniques within one run of the
--- compiler. We reserve the 'P'  mask for our uniques, and set the integer
--- part to a hash of the name of the parameter.
-mkIPUnique :: IPName Name -> (OccName -> OccName) -> Unique
-mkIPUnique n f = mkMaskedUniqueGrimily 'P' (uniqueOfFS (occNameFS (f (nameOccName (ipNameName n)))))
-
--- I would kind of like to use a newtype TyCon here, but I imagine that
--- that would cause problems because the corresponding coercion axiom would
--- coerce between types of different kinds (Fact and *)..
---
--- Do it this way for now.
---
--- FIXME: where does the code for this DataCon get generated??
--- One reasonable way to do this is to special case this DataCon in
--- e.g. Core->Stg and replace it with "id".
-ipTyCon :: IPName Name -> TyCon
-ipTyCon n = tycon
-  where
-    -- Reuse the OccName generation for classes for now. May want to revisit this.
-    tycon_u    = mkIPUnique n mkClassTyConOcc
-    tycon_name = mkPrimTc (fsLit ("?" ++ getOccString (ipNameName n))) tycon_u tycon
-    tycon      = mkAlgTyCon tycon_name
-                   (liftedTypeKind `mkArrowKind` factKind)
-                   [alphaTyVar]
-                   []      -- No stupid theta
-                   (DataTyCon [ipDataCon n] False)
-                   (IPTyCon n)
-                   NonRecursive
-                   False
 \end{code}
 
 %************************************************************************

@@ -2,9 +2,11 @@
 module TysWiredIn where
 
 import {-# SOURCE #-} DataCon    (DataCon)
+import 		      TyCon      (TyCon)
 import  	      Name 	 (Name)
 import 		      BasicTypes (IPName)
 
 
+eqTyCon :: TyCon
 ipDataCon :: IPName Name -> DataCon
 \end{code}

@@ -38,10 +38,11 @@ module Kind (
 
 #include "HsVersions.h"
 
+import {-# SOURCE #-} Type (typeKind)
+
 import TypeRep
 import TysPrim
 import TyCon
-import Var
 import PrelNames
 import Outputable
 \end{code}
@@ -62,50 +63,6 @@ isTySuperKind _                = False
 
 isLiftedTypeKindCon :: TyCon -> Bool
 isLiftedTypeKindCon tc    = tc `hasKey` liftedTypeKindTyConKey
-\end{code}
-
-%************************************************************************
-%*									*
-        The kind of a type
-%*									*
-%************************************************************************
-
-\begin{code}
-the :: Eq a => [a] -> Maybe a
-the []     = error "the: must supply at least one argument"
-the (x:xs) = go x xs
-  where go x []     = Just x
-        go x (y:ys) | x == y    = go x ys
-                    | otherwise = Nothing
-
-typeKind :: Type -> Kind
-typeKind ty@(TyConApp tc tys) 
-  | isTupleTyCon tc
-  , tyConArity tc == length tys
-  = case the (map typeKind tys) of
-      Just k  -> k
-      Nothing -> pprPanic "typeKind: insane tuple kinds" (ppr ty)
-
-  | otherwise
-  = ASSERT2( not (tc `hasKey` eqPredPrimTyConKey) || length tys == 2, ppr ty )
-    	     -- Assertion checks for unsaturated application of (~)
-	     -- See Note [The (~) TyCon] in TysPrim
-    kindAppResult (tyConKind tc) tys
-
-typeKind (AppTy fun _)        = kindFunResult (typeKind fun)
-typeKind (ForAllTy _ ty)      = typeKind ty
-typeKind (TyVarTy tyvar)      = tyVarKind tyvar
-typeKind (FunTy _arg res)
-    -- Hack alert.  The kind of (Int -> Int#) is liftedTypeKind (*), 
-    --              not unliftedTypKind (#)
-    -- The only things that can be after a function arrow are
-    --   (a) types (of kind openTypeKind or its sub-kinds)
-    --   (b) kinds (of super-kind TY) (e.g. * -> (* -> *))
-    | isTySuperKind k         = k
-    | otherwise               = ASSERT( isSubOpenTypeKind k) liftedTypeKind 
-    where
-      k = typeKind res
-
 \end{code}
 
 %************************************************************************

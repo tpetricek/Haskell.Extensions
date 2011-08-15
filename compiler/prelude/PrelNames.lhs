@@ -1182,11 +1182,11 @@ statePrimTyConKey, stableNamePrimTyConKey, stableNameTyConKey,
     word32PrimTyConKey, word32TyConKey, word64PrimTyConKey, word64TyConKey,
     liftedConKey, unliftedConKey, anyBoxConKey, kindConKey, boxityConKey,
     typeConKey, threadIdPrimTyConKey, bcoPrimTyConKey, ptrTyConKey,
-    funPtrTyConKey, tVarPrimTyConKey, eqPredPrimTyConKey :: Unique
+    funPtrTyConKey, tVarPrimTyConKey, eqPrimTyConKey :: Unique
 statePrimTyConKey                       = mkPreludeTyConUnique 50
 stableNamePrimTyConKey                  = mkPreludeTyConUnique 51
 stableNameTyConKey                      = mkPreludeTyConUnique 52
-eqPredPrimTyConKey                      = mkPreludeTyConUnique 53
+eqPrimTyConKey                          = mkPreludeTyConUnique 53
 mutVarPrimTyConKey                      = mkPreludeTyConUnique 55
 ioTyConKey                              = mkPreludeTyConUnique 56
 wordPrimTyConKey                        = mkPreludeTyConUnique 58
@@ -1316,7 +1316,7 @@ unitTyConKey = mkTupleTyConUnique Boxed 0
 charDataConKey, consDataConKey, doubleDataConKey, falseDataConKey,
     floatDataConKey, intDataConKey, nilDataConKey, ratioDataConKey,
     stableNameDataConKey, trueDataConKey, wordDataConKey,
-    ioDataConKey, integerDataConKey, eqLiftedDataConKey :: Unique
+    ioDataConKey, integerDataConKey, eqBoxDataConKey :: Unique
 charDataConKey                          = mkPreludeDataConUnique  1
 consDataConKey                          = mkPreludeDataConUnique  2
 doubleDataConKey                        = mkPreludeDataConUnique  3
@@ -1330,7 +1330,7 @@ trueDataConKey                          = mkPreludeDataConUnique 15
 wordDataConKey                          = mkPreludeDataConUnique 16
 ioDataConKey                            = mkPreludeDataConUnique 17
 integerDataConKey                       = mkPreludeDataConUnique 18
-eqLiftedDataConKey                      = mkPreludeDataConUnique 19
+eqBoxDataConKey                         = mkPreludeDataConUnique 19
 
 -- Generic data constructors
 crossDataConKey, inlDataConKey, inrDataConKey, genUnitDataConKey :: Unique

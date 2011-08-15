@@ -96,8 +96,8 @@ import BasicTypes
 import Outputable
 import Unique
 import Pair
-import TysPrim		( eqPredPrimTyCon )
-import PrelNames	( funTyConKey, eqPredPrimTyConKey )
+import TysPrim		( eqPrimTyCon )
+import PrelNames	( funTyConKey, eqPrimTyConKey )
 import Control.Applicative
 import Data.Traversable (traverse, sequenceA)
 import Control.Arrow (second)
@@ -279,7 +279,7 @@ isCoVar v = isCoVarType (varType v)
 isCoVarType :: Type -> Bool
 -- Don't rely on a PredTy; look at the representation type
 isCoVarType ty 
-  | Just tc <- tyConAppTyCon_maybe ty = tc `hasKey` eqPredPrimTyConKey
+  | Just tc <- tyConAppTyCon_maybe ty = tc `hasKey` eqPrimTyConKey
   | otherwise                         = False
 \end{code}
 
@@ -470,14 +470,13 @@ coVarKind cv = case coVarKind_maybe cv of
 
 coVarKind_maybe :: CoVar -> Maybe (Type,Type) 
 coVarKind_maybe cv = case splitTyConApp_maybe (varType cv) of
-  Just (tc, [ty1, ty2]) | tc `hasKey` eqPredPrimTyConKey -> Just (ty1, ty2)
+  Just (tc, [ty1, ty2]) | tc `hasKey` eqPrimTyConKey -> Just (ty1, ty2)
   _ -> Nothing
 
 -- | Makes a coercion type from two types: the types whose equality 
 -- is proven by the relevant 'Coercion'
-mkLiftedCoType, mkPrimCoType :: Type -> Type -> Type
-mkLiftedCoType = curry mkPrimEqPred
-mkPrimCoType = curry mkLiftedEqPred
+mkPrimCoType :: Type -> Type -> Type
+mkPrimCoType = curry mkPrimEqType
 
 isReflCo :: Coercion -> Bool
 isReflCo (Refl {}) = True

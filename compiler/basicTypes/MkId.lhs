@@ -1038,7 +1038,7 @@ voidArgId       -- :: State# RealWorld
 coercionTokenId :: Id 	      -- :: () ~ ()
 coercionTokenId -- Used to replace Coercion terms when we go to STG
   = pcMiscPrelId coercionTokenName 
-                 (mkTyConApp eqPredPrimTyCon [unitTy, unitTy])
+                 (mkTyConApp eqPrimTyCon [unitTy, unitTy])
                  noCafIdInfo
 \end{code}
 
