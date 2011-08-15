@@ -838,7 +838,7 @@ tcInstDecl2 (InstInfo { iSpec = ispec, iBinds = ibinds })
                                 op_items ibinds
 
        -- Create the result bindings
-       ; self_dict <- newEvVar (ClassP clas inst_tys)
+       ; self_dict <- newDictVar clas inst_tys
        ; let class_tc      = classTyCon clas
              [dict_constr] = tyConDataCons class_tc
              dict_bind     = mkVarBind self_dict (L loc con_app_args)
@@ -1103,7 +1103,7 @@ tcInstanceMethods dfun_id clas tyvars dfun_ev_vars inst_tys
                  -- The 'let' is necessary only because HsSyn doesn't allow
                  -- you to apply a function to a dictionary *expression*.
 
-           ; self_dict <- newEvVar (ClassP clas inst_tys)
+           ; self_dict <- newDictVar clas inst_tys
            ; let self_ev_bind = EvBind self_dict $
                                 EvDFunApp dfun_id (mkTyVarTys tyvars) dfun_ev_vars
 

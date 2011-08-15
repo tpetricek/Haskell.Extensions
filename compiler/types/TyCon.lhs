@@ -20,6 +20,7 @@ module TyCon(
         -- ** Constructing TyCons
 	mkAlgTyCon,
 	mkClassTyCon,
+        mkIParamTyCon,
 	mkFunTyCon,
 	mkPrimTyCon,
 	mkKindTyCon,
@@ -61,7 +62,7 @@ module TyCon(
 	tyConStupidTheta,
 	tyConArity,
         tyConParent,
-	tyConClass_maybe,
+	tyConClass_maybe, tyConIP_maybe,
 	tyConFamInst_maybe, tyConFamilyCoercion_maybe,tyConFamInstSig_maybe,
         synTyConDefn, synTyConRhs, synTyConType,
         tyConExtName,           -- External name for foreign types
@@ -509,6 +510,10 @@ data TyConParent
   | ClassTyCon      	
 	Class		-- INVARIANT: the classTyCon of this Class is the current tycon
 
+  -- | Associated type of a implicit parameter.
+  | IPTyCon
+        (IPName Name)
+
   -- | An *associated* type of a class.  
   | AssocFamilyTyCon   
         Class		-- The class in whose declaration the family is declared
@@ -557,6 +562,7 @@ okParent :: Name -> TyConParent -> Bool
 okParent _       NoParentTyCon                    = True
 okParent tc_name (AssocFamilyTyCon cls)           = tc_name `elem` map tyConName (classATs cls)
 okParent tc_name (ClassTyCon cls)                 = tc_name == tyConName (classTyCon cls)
+okParent _       (IPTyCon _)                      = True -- FIXME: be less rubbish
 okParent _       (FamInstTyCon fam_tc tys _co_tc) = tyConArity fam_tc == length tys
 
 isNoParent :: TyConParent -> Bool
@@ -806,6 +812,11 @@ mkAlgTyCon name kind tyvars stupid rhs parent is_rec gadt_syn
 mkClassTyCon :: Name -> Kind -> [TyVar] -> AlgTyConRhs -> Class -> RecFlag -> TyCon
 mkClassTyCon name kind tyvars rhs clas is_rec =
   mkAlgTyCon name kind tyvars [] rhs (ClassTyCon clas) is_rec False
+
+-- | Simpler specialization of 'mkAlgTyCon' for implicit paramaters
+mkIParamTyCon :: Name -> Kind -> TyVar -> AlgTyConRhs -> RecFlag -> TyCon
+mkIParamTyCon name kind tyvar rhs is_rec =
+  mkAlgTyCon name kind [tyvar] [] rhs NoParentTyCon is_rec False
 
 mkTupleTyCon :: Name 
              -> Kind    -- ^ Kind of the resulting 'TyCon'
@@ -1311,6 +1322,12 @@ isClassTyCon _                                       = False
 tyConClass_maybe :: TyCon -> Maybe Class
 tyConClass_maybe (AlgTyCon {algTcParent = ClassTyCon clas}) = Just clas
 tyConClass_maybe _                                          = Nothing
+
+-- | If this 'TyCon' is that for implicit parameter, return the IP it is for.
+-- Otherwise returns @Nothing@
+tyConIP_maybe :: TyCon -> Maybe (IPName Name)
+tyConIP_maybe (AlgTyCon {algTcParent = IPTyCon ip}) = Just ip
+tyConIP_maybe _                                     = Nothing
 
 ----------------------------------------------------------------------------
 tyConParent :: TyCon -> TyConParent

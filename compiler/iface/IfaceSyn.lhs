@@ -720,7 +720,7 @@ freeNamesIfTcFam Nothing =
   emptyNameSet
 
 freeNamesIfContext :: IfaceContext -> NameSet
-freeNamesIfContext = fnList freeNamesIfPredType
+freeNamesIfContext = fnList freeNamesIfType
 
 freeNamesIfDecls :: [IfaceDecl] -> NameSet
 freeNamesIfDecls = fnList freeNamesIfDecl
@@ -741,18 +741,9 @@ freeNamesIfConDecl c =
   fnList freeNamesIfType (ifConArgTys c) &&&
   fnList freeNamesIfType (map snd (ifConEqSpec c)) -- equality constraints
 
-freeNamesIfPredType :: IfacePredType -> NameSet
-freeNamesIfPredType (IfaceClassP cl tys) =
-   unitNameSet cl &&& fnList freeNamesIfType tys
-freeNamesIfPredType (IfaceIParam _n ty) =
-   freeNamesIfType ty
-freeNamesIfPredType (IfaceEqPred ty1 ty2) =
-   freeNamesIfType ty1 &&& freeNamesIfType ty2
-
 freeNamesIfType :: IfaceType -> NameSet
 freeNamesIfType (IfaceTyVar _)        = emptyNameSet
 freeNamesIfType (IfaceAppTy s t)      = freeNamesIfType s &&& freeNamesIfType t
-freeNamesIfType (IfacePredTy st)      = freeNamesIfPredType st
 freeNamesIfType (IfaceTyConApp tc ts) =
    freeNamesIfTc tc &&& fnList freeNamesIfType ts
 freeNamesIfType (IfaceForAllTy tv t)  =

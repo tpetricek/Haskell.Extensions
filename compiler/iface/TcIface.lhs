@@ -796,20 +796,10 @@ tcIfaceType (IfaceAppTy t1 t2)    = do { t1' <- tcIfaceType t1; t2' <- tcIfaceTy
 tcIfaceType (IfaceFunTy t1 t2)    = do { t1' <- tcIfaceType t1; t2' <- tcIfaceType t2; return (FunTy t1' t2') }
 tcIfaceType (IfaceTyConApp tc ts) = do { tc' <- tcIfaceTyCon tc; ts' <- tcIfaceTypes ts; return (mkTyConApp tc' ts') }
 tcIfaceType (IfaceForAllTy tv t)  = bindIfaceTyVar tv $ \ tv' -> do { t' <- tcIfaceType t; return (ForAllTy tv' t') }
-tcIfaceType (IfacePredTy st)      = do { st' <- tcIfacePred tcIfaceType st; return (PredTy st') }
 tcIfaceType t@(IfaceCoConApp {})  = pprPanic "tcIfaceType" (ppr t)
 
 tcIfaceTypes :: [IfaceType] -> IfL [Type]
 tcIfaceTypes tys = mapM tcIfaceType tys
-
------------------------------------------
-tcIfacePred :: (IfaceType -> IfL a) -> IfacePredType -> IfL (Pred a)
-tcIfacePred tc (IfaceClassP cls ts)
-  = do { cls' <- tcIfaceClass cls; ts' <- mapM tc ts; return (ClassP cls' ts') }
-tcIfacePred tc (IfaceIParam ip t)
-  = do { ip' <- newIPName ip; t' <- tc t; return (IParam ip' t') }
-tcIfacePred tc (IfaceEqPred t1 t2)
-  = do { t1' <- tc t1; t2' <- tc t2; return (EqPred t1' t2') }
 
 -----------------------------------------
 tcIfaceCtxt :: IfaceContext -> IfL ThetaType
@@ -831,8 +821,6 @@ tcIfaceCo (IfaceTyConApp tc ts) = mkTyConAppCo <$> tcIfaceTyCon tc <*> mapM tcIf
 tcIfaceCo (IfaceCoConApp tc ts) = tcIfaceCoApp tc ts
 tcIfaceCo (IfaceForAllTy tv t)  = bindIfaceTyVar tv $ \ tv' ->
                                   mkForAllCo tv' <$> tcIfaceCo t
--- tcIfaceCo (IfacePredTy co)      = mkPredCo <$> tcIfacePred tcIfaceCo co
-tcIfaceCo (IfacePredTy _)      = panic "tcIfaceCo"
 
 tcIfaceCoApp :: IfaceCoCon -> [IfaceType] -> IfL Coercion
 tcIfaceCoApp IfaceReflCo    [t]     = Refl         <$> tcIfaceType t

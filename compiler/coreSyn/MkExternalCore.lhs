@@ -228,8 +228,6 @@ make_ty' (TyConApp tc ts) 	 = make_tyConApp tc ts
 -- expose the representation in interface files, which definitely isn't right.
 -- Maybe CoreTidy should know whether to expand newtypes or not?
 
-make_ty' (PredTy p)	= make_ty (predTypeRep p)
-
 make_tyConApp :: TyCon -> [Type] -> C.Ty
 make_tyConApp tc ts =
   foldl C.Tapp (C.Tcon (qtc tc)) 

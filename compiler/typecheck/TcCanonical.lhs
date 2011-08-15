@@ -106,7 +106,8 @@ flattenMany ctxt tys
 -- the new type-function-free type, and a collection of new equality
 -- constraints.  See Note [Flattening] for more detail.
 flatten :: CtFlavor -> TcType -> TcS (Xi, Coercion, CanonicalCts)
--- Postcondition: Coercion :: Xi ~ TcType 
+-- Postcondition: Coercion :: Xi ~ TcType
+-- Postcondition: CanonicalCts are all CFunEqCan
 flatten ctxt ty 
   | Just ty' <- tcView ty
   = do { (xi, co, ccs) <- flatten ctxt ty'
@@ -185,10 +186,6 @@ flatten fl (TyConApp tc tys)
                                 cos_rest
                   , ccs `andCCan` ct) }
 
-flatten ctxt (PredTy pred) 
-  = do { (pred', co, ccs) <- flattenPred ctxt pred
-       ; return (PredTy pred', co, ccs) }
-
 flatten ctxt ty@(ForAllTy {})
 -- We allow for-alls when, but only when, no type function
 -- applications inside the forall involve the bound type variables
@@ -202,19 +199,6 @@ flatten ctxt ty@(ForAllTy {})
        ; unless (isEmptyBag bad_eqs)
                 (flattenForAllErrorTcS ctxt ty bad_eqs)
        ; return (mkForAllTys tvs rho', foldr mkForAllCo co tvs, ccs)  }
-
----------------
-flattenPred :: CtFlavor -> TcPredType -> TcS (TcPredType, Coercion, CanonicalCts)
-flattenPred ctxt (ClassP cls tys)
-  = do { (tys', cos, ccs) <- flattenMany ctxt tys
-       ; return (ClassP cls tys', mkPredCo $ ClassP cls cos, ccs) }
-flattenPred ctxt (IParam nm ty)
-  = do { (ty', co, ccs) <- flatten ctxt ty
-       ; return (IParam nm ty', mkPredCo $ IParam nm co, ccs) }
-flattenPred ctxt (EqPred ty1 ty2)
-  = do { (ty1', co1, ccs1) <- flatten ctxt ty1
-       ; (ty2', co2, ccs2) <- flatten ctxt ty2
-       ; return (EqPred ty1' ty2', mkPredCo $ EqPred co1 co2, ccs1 `andCCan` ccs2) }
 \end{code}
 
 %************************************************************************
@@ -244,13 +228,29 @@ mkCanonicalFEVs = foldrBagM canon_one emptyWorkList
     canon_one fev wl = do { wl' <- mkCanonicalFEV fev
                           ; return (unionWorkList wl' wl) }
 
-
 mkCanonical :: CtFlavor -> EvVar -> TcS WorkList
-mkCanonical fl ev = case evVarPred ev of 
-                        ClassP clas tys -> canClassToWorkList fl ev clas tys 
-                        IParam ip ty    -> canIPToWorkList    fl ev ip ty 
-                        EqPred ty1 ty2  -> canEqToWorkList    fl ev ty1 ty2 
-                         
+mkCanonical fl ev = go ev (predTyPredTree (evVarPred ev))
+  where
+    go ev (ClassPred clas tys) = canClassToWorkList fl ev clas tys
+    go ev (EqPred ty1 ty2)     = canEqToWorkList    fl ev ty1 ty2
+    go ev (IPPred ip ty)       = canIPToWorkList    fl ev ip ty
+    go ev (TuplePred tys)      = do
+      (mb_evs', wlists) <- liftM unzip $ forM (tys `zip` [0..]) $ \(ty, n) -> do
+        ev' <- newEvVar (predTreePredType ty)
+        mb_ev <- case fl of 
+           Wanted {}         -> return (Just ev')
+           Given {}          -> setEvBind ev' (EvTupleSel ev n) >> return Nothing
+           Derived {}        -> return Nothing -- Derived ips: we don't set any evidence
+
+        liftM ((,) mb_ev) $ go ev' ty
+
+      -- If we Wanted this TuplePred we have to bind it from the newly Wanted components
+      case sequence mb_evs' of
+        Just evs' -> setEvBind ev (EvTupleMk evs')
+        Nothing   -> return ()
+      
+      return (unionWorkLists wlists)
+    go ev (IrredPred ev_ty)    = canIrredEvidence fl ev ev_ty
 
 canClassToWorkList :: CtFlavor -> EvVar -> Class -> [TcType] -> TcS WorkList
 canClassToWorkList fl v cn tys 
@@ -378,10 +378,14 @@ newSCWorkFromFlavored ev orig_flavor cls xis
 
 is_improvement_pty :: PredType -> Bool 
 -- Either it's an equality, or has some functional dependency
-is_improvement_pty (EqPred {})      = True 
-is_improvement_pty (ClassP cls _ty) = not $ null fundeps
- where (_,fundeps,_,_,_,_) = classExtraBigSig cls
-is_improvement_pty _ = False
+is_improvement_pty ty = go (predTypePredTree ty)
+  where
+    go (EqPred {})         = True 
+    go (ClassPred cls _ty) = not $ null fundeps
+      where (_,fundeps,_,_,_,_) = classExtraBigSig cls
+    go (IPPred {})         = False
+    go (TuplePred ts)      = any go ts
+    go (IrredPred {})      = True -- Might have equalities after reduction?
 
 
 
@@ -394,6 +398,20 @@ canIPToWorkList fl v nm ty
                                       , cc_flavor = fl
                                       , cc_ip_nm = nm
                                       , cc_ip_ty = ty })
+
+canIrredEvidence :: CtFlavor -> EvVar -> TcType -> TcS WorkList
+canIrredEvidence fl v ty = do
+    (xi, co, ccs) <- flatten fl ty -- co :: xi ~ ty
+    v' <- newEvVar xi
+    case fl of 
+        Wanted {}         -> setEvBind v  (EvCast v' co)
+        Given {}          -> setEvBind v' (EvCast v (mkSymCo co)) 
+        Derived {}        -> return () -- Derived ips: we don't set any evidence
+    
+    return (workListFromEqs ccs `unionWorkList`
+            workListFromNonEq (CIrredEv { cc_id = v'
+                                        , cc_flavor = fl
+                                        , cc_ty = xi }))
 
 -----------------
 canEqToWorkList :: CtFlavor -> EvVar -> Type -> Type -> TcS WorkList
@@ -877,28 +895,12 @@ expandAway tv ty@(ForAllTy {})
            Nothing 
        else do { rho' <- expandAway tv rho
                ; return (mkForAllTys tvs rho') }
-expandAway tv (PredTy pred) 
-  = do { pred' <- expandAwayPred tv pred  
-       ; return (PredTy pred') }
 -- For a type constructor application, first try expanding away the
 -- offending variable from the arguments.  If that doesn't work, next
 -- see if the type constructor is a type synonym, and if so, expand
 -- it and try again.
 expandAway tv ty@(TyConApp tc tys)
   = (mkTyConApp tc <$> mapM (expandAway tv) tys) <|> (tcView ty >>= expandAway tv)
-
-expandAwayPred :: TcTyVar -> TcPredType -> Maybe TcPredType 
-expandAwayPred tv (ClassP cls tys) 
-  = do { tys' <- mapM (expandAway tv) tys; return (ClassP cls tys') } 
-expandAwayPred tv (EqPred ty1 ty2)
-  = do { ty1' <- expandAway tv ty1
-       ; ty2' <- expandAway tv ty2 
-       ; return (EqPred ty1' ty2') }
-expandAwayPred tv (IParam nm ty) 
-  = do { ty' <- expandAway tv ty
-       ; return (IParam nm ty') }
-
-                
 
 \end{code}
 

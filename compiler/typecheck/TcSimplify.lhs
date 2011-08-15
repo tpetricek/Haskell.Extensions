@@ -877,7 +877,6 @@ floatEqualities skols can_given wantders
           | FlatSkol ty <- tcTyVarDetails tv = tvs_under_fsks ty
           | otherwise                        = unitVarSet tv
         tvs_under_fsks (TyConApp _ tys) = unionVarSets (map tvs_under_fsks tys)
-        tvs_under_fsks (PredTy sty)     = predTvs_under_fsks sty
         tvs_under_fsks (FunTy arg res)  = tvs_under_fsks arg `unionVarSet` tvs_under_fsks res
         tvs_under_fsks (AppTy fun arg)  = tvs_under_fsks fun `unionVarSet` tvs_under_fsks arg
         tvs_under_fsks (ForAllTy tv ty) -- The kind of a coercion binder 
@@ -887,11 +886,6 @@ floatEqualities skols can_given wantders
                                         inner_tvs `unionVarSet` tvs_under_fsks (tyVarKind tv)
           where
             inner_tvs = tvs_under_fsks ty
-
-        predTvs_under_fsks :: PredType -> TyVarSet
-        predTvs_under_fsks (IParam _ ty)    = tvs_under_fsks ty
-        predTvs_under_fsks (ClassP _ tys)   = unionVarSets (map tvs_under_fsks tys)
-        predTvs_under_fsks (EqPred ty1 ty2) = tvs_under_fsks ty1 `unionVarSet` tvs_under_fsks ty2
 \end{code}
 
 Note [Preparing inert set for implications]

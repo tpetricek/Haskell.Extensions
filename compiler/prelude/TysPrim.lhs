@@ -17,15 +17,16 @@ module TysPrim(
         -- Kind constructors...
         tySuperKindTyCon, tySuperKind,
         liftedTypeKindTyCon, openTypeKindTyCon, unliftedTypeKindTyCon,
-        argTypeKindTyCon, ubxTupleKindTyCon,
+        argTypeKindTyCon, ubxTupleKindTyCon, factKindTyCon,
 
         tySuperKindTyConName, liftedTypeKindTyConName,
         openTypeKindTyConName, unliftedTypeKindTyConName,
         ubxTupleKindTyConName, argTypeKindTyConName,
+        factKindTyConName,
 
         -- Kinds
 	liftedTypeKind, unliftedTypeKind, openTypeKind,
-        argTypeKind, ubxTupleKind,
+        argTypeKind, ubxTupleKind, factKind,
         mkArrowKind, mkArrowKinds,
 
         funTyCon, funTyConName,
@@ -63,19 +64,26 @@ module TysPrim(
 
         eqPredPrimTyCon,            -- ty1 ~ ty2
 
+        -- * Implicit parameters
+        mkIPUnique, ipTyCon,
+
 	-- * Any
 	anyTyCon, anyTyConOfKind, anyTypeOfKind
   ) where
 
 #include "HsVersions.h"
 
+import {-# SOURCE #-} TysWiredIn (ipDataCon)
+
 import Var		( TyVar, mkTyVar )
-import Name		( Name, BuiltInSyntax(..), mkInternalName, mkWiredInName )
-import OccName          ( mkTcOcc,mkTyVarOccFS, mkTcOccFS )
+import Name		( Name, BuiltInSyntax(..), mkInternalName, mkWiredInName, nameOccName, getOccString )
+import OccName          ( OccName, mkTcOcc,mkTyVarOccFS, mkTcOccFS, occNameFS, mkClassTyConOcc )
 import TyCon
 import TypeRep
 import SrcLoc
 import Unique		( mkAlphaTyVarUnique )
+import UniqSupply       ( mkMaskedUniqueGrimily )
+import BasicTypes       ( IPName(..), ipNameName, RecFlag(NonRecursive) )
 import PrelNames
 import FastString
 import Outputable
@@ -139,7 +147,7 @@ addrPrimTyConName    	      = mkPrimTc (fsLit "Addr#") addrPrimTyConKey addrPrim
 floatPrimTyConName   	      = mkPrimTc (fsLit "Float#") floatPrimTyConKey floatPrimTyCon
 doublePrimTyConName  	      = mkPrimTc (fsLit "Double#") doublePrimTyConKey doublePrimTyCon
 statePrimTyConName            = mkPrimTc (fsLit "State#") statePrimTyConKey statePrimTyCon
-eqPredPrimTyConName           = mkPrimTc (fsLit "~") eqPredPrimTyConKey eqPredPrimTyCon
+eqPredPrimTyConName           = mkPrimTc (fsLit "Eq#") eqPredPrimTyConKey eqPredPrimTyCon
 realWorldTyConName            = mkPrimTc (fsLit "RealWorld") realWorldTyConKey realWorldTyCon
 arrayPrimTyConName   	      = mkPrimTc (fsLit "Array#") arrayPrimTyConKey arrayPrimTyCon
 byteArrayPrimTyConName	      = mkPrimTc (fsLit "ByteArray#") byteArrayPrimTyConKey byteArrayPrimTyCon
@@ -241,11 +249,13 @@ funTyCon = mkFunTyCon funTyConName (mkArrowKinds [argTypeKind, openTypeKind] lif
 -- | See "Type#kind_subtyping" for details of the distinction between the 'Kind' 'TyCon's
 tySuperKindTyCon, liftedTypeKindTyCon,
       openTypeKindTyCon, unliftedTypeKindTyCon,
-      ubxTupleKindTyCon, argTypeKindTyCon
+      ubxTupleKindTyCon, argTypeKindTyCon,
+      factKindTyCon
    :: TyCon
 tySuperKindTyConName, liftedTypeKindTyConName,
       openTypeKindTyConName, unliftedTypeKindTyConName,
-      ubxTupleKindTyConName, argTypeKindTyConName
+      ubxTupleKindTyConName, argTypeKindTyConName,
+      factKindTyConName
    :: Name
 
 tySuperKindTyCon      = mkSuperKindTyCon tySuperKindTyConName
@@ -254,6 +264,7 @@ openTypeKindTyCon     = mkKindTyCon openTypeKindTyConName     tySuperKind
 unliftedTypeKindTyCon = mkKindTyCon unliftedTypeKindTyConName tySuperKind
 ubxTupleKindTyCon     = mkKindTyCon ubxTupleKindTyConName     tySuperKind
 argTypeKindTyCon      = mkKindTyCon argTypeKindTyConName      tySuperKind
+factKindTyCon         = mkKindTyCon factKindTyConName         tySuperKind
 
 --------------------------
 -- ... and now their names
@@ -264,6 +275,7 @@ openTypeKindTyConName     = mkPrimTyConName (fsLit "?") openTypeKindTyConKey ope
 unliftedTypeKindTyConName = mkPrimTyConName (fsLit "#") unliftedTypeKindTyConKey unliftedTypeKindTyCon
 ubxTupleKindTyConName     = mkPrimTyConName (fsLit "(#)") ubxTupleKindTyConKey ubxTupleKindTyCon
 argTypeKindTyConName      = mkPrimTyConName (fsLit "??") argTypeKindTyConKey argTypeKindTyCon
+factKindTyConName         = mkPrimTyConName (fsLit "Fact") factKindTyConKey factKindTyCon
 
 mkPrimTyConName :: FastString -> Unique -> TyCon -> Name
 mkPrimTyConName occ key tycon = mkWiredInName gHC_PRIM (mkTcOccFS occ) 
@@ -280,13 +292,14 @@ kindTyConType :: TyCon -> Type
 kindTyConType kind = TyConApp kind []
 
 -- | See "Type#kind_subtyping" for details of the distinction between these 'Kind's
-liftedTypeKind, unliftedTypeKind, openTypeKind, argTypeKind, ubxTupleKind :: Kind
+liftedTypeKind, unliftedTypeKind, openTypeKind, argTypeKind, ubxTupleKind, factKind :: Kind
 
 liftedTypeKind   = kindTyConType liftedTypeKindTyCon
 unliftedTypeKind = kindTyConType unliftedTypeKindTyCon
 openTypeKind     = kindTyConType openTypeKindTyCon
 argTypeKind      = kindTyConType argTypeKindTyCon
 ubxTupleKind	 = kindTyConType ubxTupleKindTyCon
+factKind         = kindTyConType factKindTyCon
 
 -- | Given two kinds @k1@ and @k2@, creates the 'Kind' @k1 -> k2@
 mkArrowKind :: Kind -> Kind -> Kind
@@ -379,18 +392,18 @@ doublePrimTyCon	= pcPrimTyCon0 doublePrimTyConName DoubleRep
 %*									*
 %************************************************************************
 
-Note [The (~) TyCon)
+Note [The Eq# TyCon)
 ~~~~~~~~~~~~~~~~~~~~
-There is a perfectly ordinary type constructor (~) that represents the type
+There is a perfectly ordinary type constructor Eq# that represents the type
 of coercions (which, remember, are values).  For example
-   Refl Int :: Int ~ Int
+   Refl Int :: Eq# Int Int
 
 Atcually it is not quite "perfectly ordinary" because it is kind-polymorphic:
-   Refl Maybe :: Maybe ~ Maybe
+   Refl Maybe :: Eq# Maybe Maybe
 
-So the true kind of (~) :: forall k. k -> k -> #.  But we don't have
+So the true kind of Eq# :: forall k. k -> k -> #.  But we don't have
 polymorphic kinds (yet). However, (~) really only appears saturated in
-which case there is no problem in finding the kind of (ty1 ~ ty2). So
+which case there is no problem in finding the kind of (Eq# ty1 ty2). So
 we check that in CoreLint (and, in an assertion, in Kind.typeKind).
 
 Note [The State# TyCon]
@@ -412,7 +425,7 @@ statePrimTyCon :: TyCon   -- See Note [The State# TyCon]
 statePrimTyCon	 = pcPrimTyCon statePrimTyConName 1 VoidRep
 
 eqPredPrimTyCon :: TyCon  -- The representation type for equality predicates
-		   	  -- See Note [The (~) TyCon]
+		   	  -- See Note [The (Eq#) TyCon]
 eqPredPrimTyCon  = pcPrimTyCon eqPredPrimTyConName 2 VoidRep
 \end{code}
 
@@ -575,7 +588,40 @@ threadIdPrimTyCon :: TyCon
 threadIdPrimTyCon = pcPrimTyCon0 threadIdPrimTyConName PtrRep
 \end{code}
 
+Implicit parameters
 
+\begin{code}
+-- We have a big hack here to make sure that we get implicit parameter
+-- TyCon/DataCons which always have the same Uniques within one run of the
+-- compiler. We reserve the 'P'  mask for our uniques, and set the integer
+-- part to a hash of the name of the parameter.
+mkIPUnique :: IPName Name -> (OccName -> OccName) -> Unique
+mkIPUnique n f = mkMaskedUniqueGrimily 'P' (uniqueOfFS (occNameFS (f (nameOccName (ipNameName n)))))
+
+-- I would kind of like to use a newtype TyCon here, but I imagine that
+-- that would cause problems because the corresponding coercion axiom would
+-- coerce between types of different kinds (Fact and *)..
+--
+-- Do it this way for now.
+--
+-- FIXME: where does the code for this DataCon get generated??
+-- One reasonable way to do this is to special case this DataCon in
+-- e.g. Core->Stg and replace it with "id".
+ipTyCon :: IPName Name -> TyCon
+ipTyCon n = tycon
+  where
+    -- Reuse the OccName generation for classes for now. May want to revisit this.
+    tycon_u    = mkIPUnique n mkClassTyConOcc
+    tycon_name = mkPrimTc (fsLit ("?" ++ getOccString (ipNameName n))) tycon_u tycon
+    tycon      = mkAlgTyCon tycon_name
+                   (liftedTypeKind `mkArrowKind` factKind)
+                   [alphaTyVar]
+                   []      -- No stupid theta
+                   (DataTyCon [ipDataCon n] False)
+                   (IPTyCon n)
+                   NonRecursive
+                   False
+\end{code}
 
 %************************************************************************
 %*									*

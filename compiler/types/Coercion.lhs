@@ -33,11 +33,9 @@ module Coercion (
         mkSymCo, mkTransCo, mkNthCo,
 	mkInstCo, mkAppCo, mkTyConAppCo, mkFunCo,
         mkForAllCo, mkUnsafeCo,
-        mkNewTypeCo, mkFamInstCo, 
-        mkPredCo,
+        mkNewTypeCo, mkFamInstCo,
 
         -- ** Decomposition
-        splitCoPredTy_maybe,
         splitNewTypeRepCo_maybe, instNewTyCon_maybe, decomposeCo,
         getCoVar_maybe,
 
@@ -477,17 +475,9 @@ coVarKind_maybe cv = case splitTyConApp_maybe (varType cv) of
 
 -- | Makes a coercion type from two types: the types whose equality 
 -- is proven by the relevant 'Coercion'
-mkCoType :: Type -> Type -> Type
-mkCoType ty1 ty2 = PredTy (EqPred ty1 ty2)
-
-splitCoPredTy_maybe :: Type -> Maybe (Type, Type, Type)
-splitCoPredTy_maybe ty
-  | Just (cv,r) <- splitForAllTy_maybe ty
-  , isCoVar cv
-  , Just (s,t) <- coVarKind_maybe cv
-  = Just (s,t,r)
-  | otherwise
-  = Nothing
+mkLiftedCoType, mkPrimCoType :: Type -> Type -> Type
+mkLiftedCoType = curry mkPrimEqPred
+mkPrimCoType = curry mkLiftedEqPred
 
 isReflCo :: Coercion -> Bool
 isReflCo (Refl {}) = True
@@ -562,12 +552,6 @@ mkForAllCo :: Var -> Coercion -> Coercion
 -- note that a TyVar should be used here, not a CoVar (nor a TcTyVar)
 mkForAllCo tv (Refl ty) = ASSERT( isTyVar tv ) Refl (mkForAllTy tv ty)
 mkForAllCo tv  co       = ASSERT ( isTyVar tv ) ForAllCo tv co
-
-mkPredCo :: Pred Coercion -> Coercion
--- See Note [Predicate coercions]
-mkPredCo (EqPred co1 co2) = mkTyConAppCo eqPredPrimTyCon [co1,co2]
-mkPredCo (ClassP cls cos) = mkTyConAppCo (classTyCon cls) cos
-mkPredCo (IParam _ co)    = co
 
 -------------------------------
 
@@ -917,7 +901,6 @@ ty_co_subst subst ty
     go (ForAllTy v ty)   = mkForAllCo v' $! (ty_co_subst subst' ty)
                          where
                            (subst', v') = liftCoSubstTyVarBndr subst v
-    go (PredTy p)        = mkPredCo (go <$> p)
 
 liftCoSubstTyVar :: LiftCoSubst -> TyVar -> Maybe Coercion
 liftCoSubstTyVar (LCS _ cenv) tv = lookupVarEnv cenv tv 

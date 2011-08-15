@@ -55,7 +55,10 @@ module TysWiredIn (
         -- * Parallel arrays
 	mkPArrTy,
 	parrTyCon, parrFakeCon, isPArrTyCon, isPArrFakeCon,
-	parrTyCon_RDR, parrTyConName
+	parrTyCon_RDR, parrTyConName,
+
+        -- * Implicit parameters DataCon (TyCon is in TysPrim)
+        ipDataCon
     ) where
 
 #include "HsVersions.h"
@@ -135,6 +138,10 @@ mkWiredInDataConName built_in modu fs unique datacon
   = mkWiredInName modu (mkDataOccFS fs) unique
 		  (ADataCon datacon)	-- Relevant DataCon
 		  built_in
+
+eqTyConName, eqLiftedDataConName :: Name
+eqTyConName         = mkWiredInTyConName   UserSyntax gHC_TYPES (fsLit "~") eqTyConKey eqTyCon
+eqLiftedDataConName = mkWiredInDataConName UserSyntax gHC_TYPES (fsLit "~") eqLiftedDataConKey
 
 charTyConName, charDataConName, intTyConName, intDataConName :: Name
 charTyConName	  = mkWiredInTyConName   UserSyntax gHC_TYPES (fsLit "Char") charTyConKey charTyCon
@@ -304,12 +311,44 @@ unboxedPairDataCon :: DataCon
 unboxedPairDataCon = tupleCon   Unboxed 2
 \end{code}
 
+%************************************************************************
+%*                                                                      *
+\subsection[TysWiredIn-ImplicitParams]{Special type constructors for implicit parameters}
+%*                                                                      *
+%************************************************************************
+
+\begin{code}
+-- ipTyCon is in TysPrim
+
+ipDataCon :: IPName Name -> DataCon
+ipDataCon n = datacon
+  where
+    -- Reuse the OccName generation for classes for now. May want to revisit this.
+    datacon_u    = mkIPUnique n mkClassDataConOcc
+    datacon_name = mkWiredInDataConName UserSyntax gHC_TYPES (fsLit "IPBox") datacon_u datacon
+    datacon      = pcDataCon datacon_name [alphaTyVar] [mkTyVarTy alphaTyVar] (ipTyCon n)
+\end{code}
 
 %************************************************************************
 %*									*
 \subsection[TysWiredIn-boxed-prim]{The ``boxed primitive'' types (@Char@, @Int@, etc)}
 %*									*
 %************************************************************************
+
+\begin{code}
+eqTyCon :: TyCon
+eqTyCon = mkAlgTyCon eqTyConName
+            (mkArrowKinds [openTypeKind, openTypeKind] factKind)
+            [alphaTyVar, betaTyVar]
+            []      -- No stupid theta
+            (DataTyCon [eqLiftedDataCon] False)
+            NoParentTyCon
+            NonRecursive
+            False
+    
+eqLiftedDataCon :: DataCon
+eqLiftedDataCon = pcDataCon eqLiftedDataConName [alphaTyVar, betaTyVar] (mkTyConVarApps eqPredPrimTyCon [alphaTyVar, betaTyVar]) eqTyCon
+\end{code}
 
 \begin{code}
 charTy :: Type

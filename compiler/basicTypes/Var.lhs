@@ -101,8 +101,8 @@ type IpId   = EvId      -- A term-level implicit parameter
 
 type TyVar = Var
 type CoVar = Id		-- A coercion variable is simply an Id
-			-- variable of kind @ty1 ~ ty2@. Hence its
-			-- 'varType' is always @PredTy (EqPred t1 t2)@
+			-- variable of kind @#@. Hence its
+			-- 'varType' is always @Eq ty1 ty2@
 \end{code}
 
 %************************************************************************

@@ -92,8 +92,6 @@ synTyConsOfType ty
      go (TyConApp tc tys)         = go_tc tc tys
      go (AppTy a b)               = go a `plusNameEnv` go b
      go (FunTy a b)               = go a `plusNameEnv` go b
-     go (PredTy (IParam _ ty))    = go ty
-     go (PredTy (ClassP cls tys)) = go_s tys    -- Ignore class
      go (ForAllTy _ ty)           = go ty
 
      go_tc tc tys | isSynTyCon tc = extendNameEnv (go_s tys) (tyConName tc) tc
@@ -353,9 +351,6 @@ tcTyConsOfType ty
      go (TyConApp tc tys)          = go_tc tc tys
      go (AppTy a b)                = go a `plusNameEnv` go b
      go (FunTy a b)                = go a `plusNameEnv` go b
-     go (PredTy (IParam _ ty))     = go ty
-     go (PredTy (ClassP cls tys))  = go_tc (classTyCon cls) tys
-     go (PredTy (EqPred ty1 ty2))  = go ty1 `plusNameEnv` go ty2
      go (ForAllTy _ ty)            = go ty
 
      go_tc tc tys = extendNameEnv (go_s tys) (tyConName tc) tc

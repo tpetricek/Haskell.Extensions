@@ -11,28 +11,23 @@
 module TypeRep (
 	TyThing(..), 
 	Type(..),
-        Pred(..),                       -- to friends
-	
         Kind, SuperKind,
         PredType, ThetaType,      -- Synonyms
 
         -- Functions over types
         mkTyConApp, mkTyConTy, mkTyVarTy, mkTyVarTys,
-        isLiftedTypeKind, 
-
+        isLiftedTypeKind,
+        
         -- Pretty-printing
 	pprType, pprParendType, pprTypeApp,
 	pprTyThing, pprTyThingCategory, 
-	pprPredTy, pprEqPred, pprTheta, pprForAll, pprThetaArrowTy, pprClassPred,
+	pprEqPred, pprTheta, pprForAll, pprThetaArrowTy, pprClassPred,
         pprKind, pprParendKind,
 	Prec(..), maybeParen, pprTcApp, pprTypeNameApp, 
-        pprPrefixApp, pprPred, pprArrowChain, pprThetaArrow,
+        pprPrefixApp, pprArrowChain,
 
         -- Free variables
         tyVarsOfType, tyVarsOfTypes,
-        tyVarsOfPred, tyVarsOfTheta,
-	varsOfPred, varsOfTheta,
-	predSize,
 
         -- Substitutions
         TvSubst(..), TvSubstEnv
@@ -41,6 +36,7 @@ module TypeRep (
 #include "HsVersions.h"
 
 import {-# SOURCE #-} DataCon( DataCon, dataConName )
+import {-# SOURCE #-} Type( noParenPred, isPredTy ) -- Transitively pulls in a LOT of stuff, better to break the loop
 
 -- friends:
 import Var
@@ -59,8 +55,6 @@ import Pair
 
 -- libraries
 import qualified Data.Data        as Data hiding ( TyCon )
-import qualified Data.Foldable    as Data
-import qualified Data.Traversable as Data
 \end{code}
 
 	----------------------
@@ -153,13 +147,6 @@ data Type
 	TyVar         -- Type variable
 	Type	        -- ^ A polymorphic type
 
-  | PredTy
-	PredType	-- ^ The type of evidence for a type predictate.
-	                -- See Note [PredTy]
-			-- By the time we are in Core-land, PredTys are
-			-- synonymous with their representation
-			-- (see Type.predTypeRep)
-
   deriving (Data.Data, Data.Typeable)
 
 -- | The key type representing kinds in the compiler.
@@ -184,16 +171,20 @@ The type   forall ab. (a ~ [b]) => blah
 is encoded like this:
 
    ForAllTy (a:*) $ ForAllTy (b:*) $
-   FunTy (PredTy (EqPred a [b]) $
+   FunTy (TyConApp (~) [a, [b]]) $
    blah
 
 -------------------------------------
  		Note [PredTy]
 
 \begin{code}
--- | A type of the form @PredTy p@ represents a value whose type is
+-- | A type of the form @p@ of kind @Fact@ represents a value whose type is
 -- the Haskell predicate @p@, where a predicate is what occurs before 
 -- the @=>@ in a Haskell type.
+--
+-- We use 'PredType' as documentation to mark those types that we guarantee to have
+-- this kind.
+--
 -- It can be expanded into its representation, but: 
 --
 -- * The type checker must treat it as opaque
@@ -207,13 +198,7 @@ is encoded like this:
 -- > h :: (r\l) => {r} => {l::Int | r}
 --
 -- Here the @Eq a@ and @?x :: Int -> Int@ and @r\l@ are all called \"predicates\"
-type PredType = Pred Type
-
-data Pred a   -- Typically 'a' is instantiated with Type or Coercion
-  = ClassP Class [a]            -- ^ Class predicate e.g. @Eq a@
-  | IParam (IPName Name) a      -- ^ Implicit parameter e.g. @?x :: Int@
-  | EqPred a a                  -- ^ Equality predicate e.g @ty1 ~ ty2@
-  deriving (Data.Data, Data.Typeable, Data.Foldable, Data.Traversable, Functor)
+type PredType = Type
 
 -- | A collection of 'PredType's
 type ThetaType = [PredType]
@@ -225,12 +210,11 @@ to expand to allow them.)
 A Haskell qualified type, such as that for f,g,h above, is
 represented using 
 	* a FunTy for the double arrow
-	* with a PredTy as the function argument
+	* with a type of kind Fact as the function argument
 
 The predicate really does turn into a real extra argument to the
-function.  If the argument has type (PredTy p) then the predicate p is
-represented by evidence (a dictionary, for example, of type (predRepTy p).
-
+function.  If the argument has type (p :: Fact) then the predicate p is
+represented by evidence of type p.
 
 %************************************************************************
 %*									*
@@ -276,36 +260,16 @@ isLiftedTypeKind _                = False
 %************************************************************************
 
 \begin{code}
-tyVarsOfPred :: PredType -> TyVarSet
-tyVarsOfPred = varsOfPred tyVarsOfType
-
-tyVarsOfTheta :: ThetaType -> TyVarSet
-tyVarsOfTheta = varsOfTheta tyVarsOfType
-
 tyVarsOfType :: Type -> VarSet
 -- ^ NB: for type synonyms tyVarsOfType does /not/ expand the synonym
 tyVarsOfType (TyVarTy v)         = unitVarSet v
 tyVarsOfType (TyConApp _ tys)    = tyVarsOfTypes tys
-tyVarsOfType (PredTy sty)        = varsOfPred tyVarsOfType sty
 tyVarsOfType (FunTy arg res)     = tyVarsOfType arg `unionVarSet` tyVarsOfType res
 tyVarsOfType (AppTy fun arg)     = tyVarsOfType fun `unionVarSet` tyVarsOfType arg
 tyVarsOfType (ForAllTy tyvar ty) = delVarSet (tyVarsOfType ty) tyvar
 
 tyVarsOfTypes :: [Type] -> TyVarSet
 tyVarsOfTypes tys = foldr (unionVarSet . tyVarsOfType) emptyVarSet tys
-
-varsOfPred :: (a -> VarSet) -> Pred a -> VarSet
-varsOfPred f (IParam _ ty)    = f ty
-varsOfPred f (ClassP _ tys)   = foldr (unionVarSet . f) emptyVarSet tys
-varsOfPred f (EqPred ty1 ty2) = f ty1 `unionVarSet` f ty2
-
-varsOfTheta :: (a -> VarSet) -> [Pred a] -> VarSet
-varsOfTheta f = foldr (unionVarSet . varsOfPred f) emptyVarSet
-
-predSize :: (a -> Int) -> Pred a -> Int
-predSize size (IParam _ t)   = 1 + size t
-predSize size (ClassP _ ts)  = 1 + sum (map size ts)
-predSize size (EqPred t1 t2) = size t1 + size t2
 \end{code}
 
 %************************************************************************
@@ -464,15 +428,6 @@ pprKind       = pprType
 pprParendKind = pprParendType
 
 ------------------
-pprPredTy :: PredType -> SDoc
-pprPredTy = pprPred ppr_type
-
-pprPred :: (Prec -> a -> SDoc) -> Pred a -> SDoc
-pprPred pp (ClassP cls tys) = ppr_class_pred pp cls tys
-pprPred pp (IParam ip ty)   = ppr ip <> dcolon <> pp TopPrec ty
-pprPred pp (EqPred ty1 ty2) = ppr_eq_pred pp (Pair ty1 ty2)
-
-------------
 pprEqPred :: Pair Type -> SDoc
 pprEqPred = ppr_eq_pred ppr_type
 
@@ -495,16 +450,13 @@ ppr_class_pred pp clas tys = pprTypeNameApp TopPrec pp (getName clas) tys
 ------------
 pprTheta :: ThetaType -> SDoc
 -- pprTheta [pred] = pprPred pred	 -- I'm in two minds about this
-pprTheta theta  = parens (sep (punctuate comma (map pprPredTy theta)))
+pprTheta theta  = parens (sep (punctuate comma (map (ppr_type TopPrec) theta)))
 
 pprThetaArrowTy :: ThetaType -> SDoc
-pprThetaArrowTy = pprThetaArrow ppr_type
-
-pprThetaArrow :: (Prec -> a -> SDoc) -> [Pred a] -> SDoc
-pprThetaArrow _ []      = empty
-pprThetaArrow pp [pred]
-      | noParenPred pred = pprPred pp pred <+> darrow
-pprThetaArrow pp preds   = parens (fsep (punctuate comma (map (pprPred pp) preds)))
+pprThetaArrowTy []      = empty
+pprThetaArrowTy [pred]
+      | noParenPred pred = ppr_type TopPrec pred <+> darrow
+pprThetaArrowTy preds   = parens (fsep (punctuate comma (map (ppr_type TopPrec) preds)))
                             <+> darrow
     -- Notice 'fsep' here rather that 'sep', so that
     -- type contexts don't get displayed in a giant column
@@ -527,23 +479,10 @@ pprThetaArrow pp preds   = parens (fsep (punctuate comma (map (pprPred pp) preds
     --  instance (Eq a, Eq b, Eq c, Eq d, Eq e, Eq f, Eq g, Eq h, Eq i,
     --            Eq j, Eq k, Eq l) =>
     --           Eq (a, b, c, d, e, f, g, h, i, j, k, l)
-			   
-noParenPred :: Pred a -> Bool
--- A predicate that can appear without parens before a "=>"
---       C a => a -> a
---       a~b => a -> b
--- But   (?x::Int) => Int -> Int
-noParenPred (ClassP {}) = True
-noParenPred (EqPred {}) = True
-noParenPred (IParam {}) = False
 
 ------------------
 instance Outputable Type where
     ppr ty = pprType ty
-
-instance Outputable (Pred Type) where
-    ppr = pprPredTy   -- Not for arbitrary (Pred a), because the
-    	  	      -- (Outputable a) doesn't give precedence
 
 instance Outputable name => OutputableBndr (IPName name) where
     pprBndr _ n = ppr n	-- Simple for now
@@ -553,26 +492,16 @@ instance Outputable name => OutputableBndr (IPName name) where
 
 ppr_type :: Prec -> Type -> SDoc
 ppr_type _ (TyVarTy tv)	      = ppr_tvar tv
-ppr_type p (PredTy pred)      = maybeParen p TyConPrec $
-                                ifPprDebug (ptext (sLit "<pred>")) <> (pprPredTy pred)
 ppr_type p (TyConApp tc tys)  = pprTcApp p ppr_type tc tys
 
 ppr_type p (AppTy t1 t2) = maybeParen p TyConPrec $
 			   pprType t1 <+> ppr_type TyConPrec t2
 
 ppr_type p ty@(ForAllTy {})        = ppr_forall_type p ty
-ppr_type p ty@(FunTy (PredTy _) _) = ppr_forall_type p ty
-
-ppr_type p (FunTy ty1 ty2)
-  = pprArrowChain p (ppr_type FunPrec ty1 : ppr_fun_tail ty2)
-  where
-    -- We don't want to lose synonyms, so we mustn't use splitFunTys here.
-    ppr_fun_tail (FunTy ty1 ty2)
-      | not (is_pred ty1) = ppr_type FunPrec ty1 : ppr_fun_tail ty2
-    ppr_fun_tail other_ty = [ppr_type TopPrec other_ty]
-
-    is_pred (PredTy {}) = True
-    is_pred _           = False
+ppr_type p ty@(FunTy ty1 ty2)
+  | isPredTy ty1 = ppr_forall_type p ty
+  | otherwise    = maybeParen p FunPrec $
+                     sep [ppr_type FunPrec ty1, arrow <+> ppr_type TopPrec ty2]
 
 ppr_forall_type :: Prec -> Type -> SDoc
 ppr_forall_type p ty
@@ -583,10 +512,10 @@ ppr_forall_type p ty
     (ctxt, tau) = split2 [] rho
 
     split1 tvs (ForAllTy tv ty) = split1 (tv:tvs) ty
-    split1 tvs ty	        = (reverse tvs, ty)
+    split1 tvs ty          = (reverse tvs, ty)
  
-    split2 ps (PredTy p `FunTy` ty) = split2 (p:ps) ty
-    split2 ps ty		    = (reverse ps, ty)
+    split2 ps (ty1 `FunTy` ty2) | isPredTy ty1 = split2 (ty1:ps) ty2
+    split2 ps ty                               = (reverse ps, ty)
 
 ppr_tvar :: TyVar -> SDoc
 ppr_tvar tv  -- Note [Infix type variables]

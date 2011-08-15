@@ -293,7 +293,7 @@ mkDataConIds wrap_name wkr_name data_con
         -- extra constraints where necessary.
     wrap_tvs    = (univ_tvs `minusList` map fst eq_spec) ++ ex_tvs
     res_ty_args = substTyVars (mkTopTvSubst eq_spec) univ_tvs
-    ev_tys      = mkPredTys other_theta
+    ev_tys      = other_theta
     wrap_ty     = mkForAllTys wrap_tvs $ 
                   mkFunTys ev_tys $
                   mkFunTys orig_arg_tys $ res_ty
@@ -481,7 +481,7 @@ mkDictSelId no_unf name clas
 
     the_arg_id     = arg_ids !! val_index
     pred       	   = mkClassPred clas (mkTyVarTys tyvars)
-    dict_id    	   = mkTemplateLocal 1 $ mkPredTy pred
+    dict_id    	   = mkTemplateLocal 1 pred
     arg_ids    	   = mkTemplateLocalsNum 2 arg_tys
 
     rhs = mkLams tyvars  (Lam dict_id   rhs_body)

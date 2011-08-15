@@ -979,7 +979,8 @@ lookupClassInstances c ts
             Right rdr_pred -> do
         { rn_pred <- rnLPred doc rdr_pred	-- Rename
         ; kc_pred <- kcHsLPred rn_pred		-- Kind check
-        ; ClassP cls tys <- dsHsLPred kc_pred	-- Type check
+        ; pred <- dsHsLPred kc_pred	-- Type check
+        ; Just (cls, tys) <- getClassPredTys_maybe pred
 
 	-- Now look up instances
         ; inst_envs <- tcGetInstEnvs
@@ -1221,12 +1222,12 @@ reifyClassInstance i
 reifyType :: TypeRep.Type -> TcM TH.Type
 -- Monadic only because of failure
 reifyType ty@(ForAllTy _ _)        = reify_for_all ty
-reifyType ty@(PredTy {} `FunTy` _) = reify_for_all ty  -- Types like ((?x::Int) => Char -> Char)
 reifyType (TyVarTy tv)	    = return (TH.VarT (reifyName tv))
 reifyType (TyConApp tc tys) = reify_tc_app tc tys   -- Do not expand type synonyms here
 reifyType (AppTy t1 t2)     = do { [r1,r2] <- reifyTypes [t1,t2] ; return (r1 `TH.AppT` r2) }
-reifyType (FunTy t1 t2)     = do { [r1,r2] <- reifyTypes [t1,t2] ; return (TH.ArrowT `TH.AppT` r1 `TH.AppT` r2) }
-reifyType ty@(PredTy {})    = pprPanic "reifyType PredTy" (ppr ty)
+reifyType (FunTy t1 t2)
+  | isPredTy t1 = reify_for_all ty  -- Types like ((?x::Int) => Char -> Char)
+  | otherwise   = do { [r1,r2] <- reifyTypes [t1,t2] ; return (TH.ArrowT `TH.AppT` r1 `TH.AppT` r2) }
 
 reify_for_all :: TypeRep.Type -> TcM TH.Type
 reify_for_all ty
@@ -1283,16 +1284,16 @@ reify_tc_app tc tys
          | otherwise                = TH.ConT (reifyName tc)
 
 reifyPred :: TypeRep.PredType -> TcM TH.Pred
-reifyPred (ClassP cls tys) 
-  = do { tys' <- reifyTypes tys 
-       ; return $ TH.ClassP (reifyName cls) tys' }
-
-reifyPred p@(IParam _ _)   = noTH (sLit "implicit parameters") (ppr p)
-reifyPred (EqPred ty1 ty2) 
-  = do { ty1' <- reifyType ty1
-       ; ty2' <- reifyType ty2
-       ; return $ TH.EqualP ty1' ty2'
-       }
+reifyPred ty = case predTypePredTree ty of
+  ClassPred cls tys -> do { tys' <- reifyTypes tys 
+                          ; return $ TH.ClassP (reifyName cls) tys' }
+  IPPred _ _        -> noTH (sLit "implicit parameters") (ppr p)
+  EqPred ty1 ty2    -> do { ty1' <- reifyType ty1
+                          ; ty2' <- reifyType ty2
+                          ; return $ TH.EqualP ty1' ty2'
+                          }
+  TuplePred _ -> noTH (sLit "tuple predicates") (ppr ty)
+  IrredPred _ -> noTH (sLit "irreducible predicates") (ppr ty)
 
 
 ------------------------------

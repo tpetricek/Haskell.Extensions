@@ -1050,6 +1050,8 @@ zonkEvTerm env (EvCoercion co)    = do { co' <- zonkTcCoToCo env co
 zonkEvTerm env (EvCast v co)      = ASSERT( isId v) 
                                     do { co' <- zonkTcCoToCo env co
                                        ; return (EvCast (zonkIdOcc env v) co') }
+zonkEvTerm env (EvTupleSel v n)   = return (EvTupleSel (zonkIdOcc env v) n)
+zonkEvTerm env (EvTupleMk vs)     = return (EvTupleMk (map (zonkIdOcc env) vs))
 zonkEvTerm env (EvSuperClass d n) = return (EvSuperClass (zonkIdOcc env d) n)
 zonkEvTerm env (EvDFunApp df tys tms)
   = do { tys' <- zonkTcTypeToTypes env tys

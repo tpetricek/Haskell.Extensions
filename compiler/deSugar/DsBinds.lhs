@@ -234,6 +234,8 @@ dsEvBinds bs = return (map dsEvGroup sccs)
     free_vars_of (EvCast v co)      = v : varSetElems (tyCoVarsOfCo co)
     free_vars_of (EvCoercion co)    = varSetElems (tyCoVarsOfCo co)
     free_vars_of (EvDFunApp _ _ vs) = vs
+    free_vars_of (EvTupleSel v _)   = [v]
+    free_vars_of (EvTupleMk vs)     = vs
     free_vars_of (EvSuperClass d _) = [d]
 
 dsEvGroup :: SCC EvBind -> DsEvBind
@@ -265,6 +267,16 @@ dsEvTerm (EvId v)                = Var v
 dsEvTerm (EvCast v co)           = Cast (Var v) co
 dsEvTerm (EvDFunApp df tys vars) = Var df `mkTyApps` tys `mkVarApps` vars
 dsEvTerm (EvCoercion co)         = Coercion co
+dsEvTerm (EvTupleSel v n)
+   = ASSERT( isTupleTyCon tc )
+     Case (Var v) (mkWildValBinder (varType v)) (tys !! n) [(DataAlt dc, xs, Var v')]
+  where
+    (tc, tys) = splitTyConApp (evVarPred v)
+    Just dc = tyConDataCons_maybe tc
+    v' = v `setVarType` ty_want
+    xs = map mkWildValBinder tys_before ++ v' : map mkWildValBinder tys_after
+    (tys_before, ty_want:tys_after) = splitAt n tys
+dsEvTerm (EvTupleSel vs) = mkCoreVarTup vs
 dsEvTerm (EvSuperClass d n)
   = ASSERT( isClassPred (classSCTheta cls !! n) )
     	    -- We can only select *dictionary* superclasses

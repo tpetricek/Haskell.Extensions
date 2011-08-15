@@ -339,7 +339,7 @@ lintCoreExpr (Type ty)
 lintCoreExpr (Coercion co)
   = do { co' <- lintInCo co
        ; let Pair ty1 ty2 = coercionKind co'
-       ; return (mkPredTy $ EqPred ty1 ty2) }
+       ; return (mkTyConApp eqPredPrimTyCon [ty1, ty2] }
 \end{code}
 
 %************************************************************************
@@ -716,7 +716,9 @@ lintType ty@(FunTy t1 t2)
   = lint_ty_app ty (tyConKind funTyCon) [t1,t2]
 
 lintType ty@(TyConApp tc tys)
-  | tc `hasKey` eqPredPrimTyConKey	-- See Note [The (~) TyCon] in TysPrim
+  | tc `hasKey` eqPredPrimTyConKey	-- See Note [The Eq# TyCon] in TysPrim
+  = lint_prim_eq_pred ty tys
+  | tc `hasKey` eqPredTyConKey
   = lint_eq_pred ty tys
   | tyConHasKind tc
   = lint_ty_app ty (tyConKind tc) tys
@@ -727,20 +729,6 @@ lintType (ForAllTy tv ty)
   = do { lintTyBndrKind tv
        ; addInScopeVar tv (lintType ty) }
 
-lintType ty@(PredTy (ClassP cls tys))
-  = lint_ty_app ty (tyConKind (classTyCon cls)) tys
-
-lintType (PredTy (IParam _ p_ty))
-  = lintType p_ty
-
-lintType ty@(PredTy (EqPred t1 t2))
-  = do { k1 <- lintType t1
-       ; k2 <- lintType t2
-       ; unless (k1 `eqKind` k2) 
-                (addErrL (sep [ ptext (sLit "Kind mis-match in equality predicate:")
-                              , nest 2 (ppr ty) ]))
-       ; return unliftedTypeKind }
-
 ----------------
 lint_ty_app :: Type -> Kind -> [OutType] -> LintM Kind
 lint_ty_app ty k tys 
@@ -748,7 +736,21 @@ lint_ty_app ty k tys
        ; lint_kind_app (ptext (sLit "type") <+> quotes (ppr ty)) k ks }
 
 lint_eq_pred :: Type -> [OutType] -> LintM Kind
-lint_eq_pred ty arg_tys
+lint_eq_pred ty arg_tys = case arg_tys of
+  [ty1, ty2] ->  do { k1 <- lintType ty1
+                    ; k2 <- lintType ty2
+                    ; unless (k1 `eqKind` k2) 
+                             (addErrL (sep [ ptext (sLit "Kind mis-match in equality predicate:")
+                                           , nest 2 (ppr ty) ]))
+                    ; return factKind }
+  [ty1] -> do { k1 <- lintType ty1;
+                return (k1 `mkFunTy` factKind) }
+  []    -> do { return (typeKind ty) }
+  _     -> failWithL (ptext (sLit "Oversaturated (~) type") <+> ppr ty)
+
+
+lint_prim_eq_pred :: Type -> [OutType] -> LintM Kind
+lint_prim_eq_pred ty arg_tys
   | [ty1,ty2] <- arg_tys
   = do { k1 <- lintType ty1
        ; k2 <- lintType ty2
@@ -756,7 +758,7 @@ lint_eq_pred ty arg_tys
                 (ptext (sLit "Mismatched arg kinds:") <+> ppr ty)
        ; return unliftedTypeKind }
   | otherwise
-  = failWithL (ptext (sLit "Unsaturated (~) type") <+> ppr ty)
+  = failWithL (ptext (sLit "Unsaturated Eq# type") <+> ppr ty)
 
 ----------------
 check_co_app :: Coercion -> Kind -> [OutType] -> LintM ()

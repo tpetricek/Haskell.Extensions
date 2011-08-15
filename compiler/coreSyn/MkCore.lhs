@@ -151,7 +151,7 @@ mk_val_app fun arg arg_ty res_ty
 	-- fragmet of it as the fun part of a 'mk_val_app'.
 
 mkWildEvBinder :: PredType -> EvVar
-mkWildEvBinder pred = mkWildValBinder (mkPredTy pred)
+mkWildEvBinder pred = mkWildValBinder pred
 
 -- | Make a /wildcard binder/. This is typically used when you need a binder 
 -- that you expect to use only at a *binding* site.  Do not use it at

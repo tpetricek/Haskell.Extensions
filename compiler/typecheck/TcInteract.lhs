@@ -143,6 +143,7 @@ data InertSet
   = IS { inert_eqs          :: CanonicalCts               -- Equalities only (CTyEqCan)
        , inert_dicts        :: CCanMap Class              -- Dictionaries only
        , inert_ips          :: CCanMap (IPName Name)      -- Implicit parameters 
+       , inert_irreds       :: CanonicalCts
        , inert_frozen       :: CanonicalCts
        , inert_funeqs       :: CCanMap TyCon              -- Type family equalities only
                -- This representation allows us to quickly get to the relevant 
@@ -153,14 +154,16 @@ tyVarsOfInert :: InertSet -> TcTyVarSet
 tyVarsOfInert (IS { inert_eqs    = eqs
                   , inert_dicts  = dictmap
                   , inert_ips    = ipmap
+                  , inert_irreds = irreds
                   , inert_frozen = frozen
                   , inert_funeqs = funeqmap }) = tyVarsOfCanonicals cts
   where
-    cts = eqs `andCCan` frozen `andCCan` cCanMapToBag dictmap
+    cts = eqs `andCCan` frozen `andCCan` irreds `andCCan` cCanMapToBag dictmap
               `andCCan` cCanMapToBag ipmap `andCCan` cCanMapToBag funeqmap
 
 instance Outputable InertSet where
   ppr is = vcat [ vcat (map ppr (Bag.bagToList $ inert_eqs is))
+                , vcat (map ppr (Bag.bagToList $ inert_irreds is)) 
                 , vcat (map ppr (Bag.bagToList $ cCanMapToBag (inert_dicts is)))
                 , vcat (map ppr (Bag.bagToList $ cCanMapToBag (inert_ips is))) 
                 , vcat (map ppr (Bag.bagToList $ cCanMapToBag (inert_funeqs is)))
@@ -171,6 +174,7 @@ instance Outputable InertSet where
 emptyInert :: InertSet
 emptyInert = IS { inert_eqs    = Bag.emptyBag
                 , inert_frozen = Bag.emptyBag
+                , inert_irred  = Bag.emptyBag
                 , inert_dicts  = emptyCCanMap
                 , inert_ips    = emptyCCanMap
                 , inert_funeqs = emptyCCanMap }
@@ -178,12 +182,14 @@ emptyInert = IS { inert_eqs    = Bag.emptyBag
 updInertSet :: InertSet -> AtomicInert -> InertSet 
 updInertSet is item 
   | isCTyEqCan item                     -- Other equality 
-  = let eqs' = inert_eqs is `Bag.snocBag` item 
+  = let eqs' = inert_eqs is `Bag.snocBag` item
     in is { inert_eqs = eqs' } 
   | Just cls <- isCDictCan_Maybe item   -- Dictionary 
   = is { inert_dicts = updCCanMap (cls,item) (inert_dicts is) } 
   | Just x  <- isCIPCan_Maybe item      -- IP 
   = is { inert_ips   = updCCanMap (x,item) (inert_ips is) }  
+  | isCIrredEvCan item                     -- Presently-irreducible evidence
+  = is { inert_irred = inert_irred is `Bag.snocBag` item }
   | Just tc <- isCFunEqCan_Maybe item   -- Function equality 
   = is { inert_funeqs = updCCanMap (tc,item) (inert_funeqs is) }
   | otherwise 
@@ -191,20 +197,22 @@ updInertSet is item
 
 extractUnsolved :: InertSet -> (InertSet, CanonicalCts)
 -- Postcondition: the returned canonical cts are either Derived, or Wanted.
-extractUnsolved is@(IS {inert_eqs = eqs}) 
+extractUnsolved is@(IS {inert_eqs = eqs, inert_irreds = irreds}) 
   = let is_solved  = is { inert_eqs    = solved_eqs
                         , inert_dicts  = solved_dicts
                         , inert_ips    = solved_ips
+                        , inert_irreds = solved_irreds
                         , inert_frozen = emptyCCan
                         , inert_funeqs = solved_funeqs }
     in (is_solved, unsolved)
 
   where (unsolved_eqs, solved_eqs)       = Bag.partitionBag (not.isGivenOrSolvedCt) eqs
+        (unsolved_irreds, solved_irreds) = Bag.partitionBag (not.isGivenOrSolvedCt) irreds
         (unsolved_ips, solved_ips)       = extractUnsolvedCMap (inert_ips is) 
         (unsolved_dicts, solved_dicts)   = extractUnsolvedCMap (inert_dicts is) 
         (unsolved_funeqs, solved_funeqs) = extractUnsolvedCMap (inert_funeqs is) 
 
-        unsolved = unsolved_eqs `unionBags` inert_frozen is `unionBags`
+        unsolved = unsolved_eqs `unionBags` inert_frozen is `unionBags` unsolved_irreds `unionBags`
                    unsolved_ips `unionBags` unsolved_dicts `unionBags` unsolved_funeqs
 \end{code}
 
@@ -374,7 +382,7 @@ tryPreSolveAndInteract :: SimplContext
                        -> TcS (Bool, InertSet)
 -- Returns: True if it was able to discharge this constraint AND all previous ones
 tryPreSolveAndInteract sctx dyn_flags ct (all_previous_discharged, inert)
-  = do { let inert_cts = get_inert_cts (evVarPred ev_var)
+  = do { let inert_cts = get_inert_cts (predTypePredTree (evVarPred ev_var))
 
        ; this_one_discharged <- 
            if isCFrozenErr ct then 
@@ -393,15 +401,19 @@ tryPreSolveAndInteract sctx dyn_flags ct (all_previous_discharged, inert)
     ev_var = cc_id ct
     fl = cc_flavor ct 
 
-    get_inert_cts (ClassP clas _)
+    get_inert_cts (ClassPred clas _)
       | simplEqsOnly sctx = emptyCCan
       | otherwise         = fst (getRelevantCts clas (inert_dicts inert))
-    get_inert_cts (IParam {})
+    get_inert_cts (IPPred {})
       = emptyCCan -- We must not do the same thing for IParams, because (contrary
                   -- to dictionaries), work items /must/ override inert items.
                  -- See Note [Overriding implicit parameters] in TcInteract.
     get_inert_cts (EqPred {})
       = inert_eqs inert `unionBags` cCanMapToBag (inert_funeqs inert)
+    get_inert_cts (TuplePred ts)
+      = unionBags $ map get_inert_cts ts
+    get_inert_cts (IrredPred {})
+      = inert_irreds inert
 
 dischargeFromCCans :: CanonicalCts -> EvVar -> CtFlavor -> TcS Bool
 -- See if this (pre-canonicalised) work-item is identical to a 
@@ -861,7 +873,7 @@ interactWithInertsStage depth workItem inert
     getISRelevant (CIPCan { cc_ip_nm = nm }) is 
       = let (relevant, residual_map) = getRelevantCts nm (inert_ips is)
         in (relevant, is { inert_ips = residual_map }) 
-    -- An equality, finally, may kick everything except equalities out 
+    -- An equality (or CIrredEvCan), finally, may kick everything except equalities out 
     -- because we have already interacted the equalities in interactWithInertEqsStage
     getISRelevant _eq_ct is  -- Equality, everything is relevant for this one 
                              -- TODO: if we were caching variables, we'd know that only 
@@ -920,8 +932,9 @@ interactWithInert inert workItem
 
 allowedInteraction :: Bool -> AtomicInert -> WorkItem -> Bool 
 -- Allowed interactions 
-allowedInteraction eqs_only (CDictCan {}) (CDictCan {}) = not eqs_only
-allowedInteraction eqs_only (CIPCan {})   (CIPCan {})   = not eqs_only
+allowedInteraction eqs_only (CDictCan {})    (CDictCan {})    = not eqs_only
+allowedInteraction eqs_only (CIPCan {})      (CIPCan {})      = not eqs_only
+allowedInteraction eqs_only (CIrredEvCan {}) (CIrredEvCan {}) = not eqs_only
 allowedInteraction _ _ _ = True 
 
 --------------------------------------------
@@ -933,8 +946,8 @@ doInteractWithInert
    workItem@(CDictCan { cc_id = d2, cc_flavor = fl2, cc_class = cls2, cc_tyargs = tys2 })
 
   | cls1 == cls2  
-  = do { let pty1 = ClassP cls1 tys1
-             pty2 = ClassP cls2 tys2
+  = do { let pty1 = mkClassPred cls1 tys1
+             pty2 = mkClassPred cls2 tys2
              inert_pred_loc     = (pty1, pprFlavorArising fl1)
              work_item_pred_loc = (pty2, pprFlavorArising fl2)
 
@@ -1023,6 +1036,20 @@ doInteractWithInert (CDictCan { cc_id = dv, cc_flavor = ifl, cc_class = cl, cc_t
 
 -- Class constraint and given equality: use the equality to rewrite
 -- the class constraint.
+doInteractWithInert (CTyEqCan { cc_id = cv, cc_flavor = ifl, cc_tyvar = tv, cc_rhs = xi }) 
+                    (CIrredEvCan { cc_id = id, cc_flavor = wfl, cc_ty = ty })
+  | ifl `canRewrite` wfl
+  , tv `elemVarSet` tyVarsOfType ty 
+  = do { rewritten_irred <- rewriteIrred (cv,tv,xi) (id,wfl,ty) 
+       ; mkIRStopK "Eq/Irred" rewritted_irred } 
+
+doInteractWithInert (CIrredEvCan { cc_id = id, cc_flavor = ifl, cc_ty = ty }) 
+           workItem@(CTyEqCan { cc_id = cv, cc_flavor = wfl, cc_tyvar = tv, cc_rhs = xi })
+  | wfl `canRewrite` ifl
+  , tv `elemVarSet` tyVarsOfType ty
+  = do { rewritten_irred <- rewriteIrred (cv,tv,xi) (id,ifl,ty) 
+       ; mkIRContinue "Irred/Eq" workItem DropInert rewritten_irred }
+
 doInteractWithInert (CTyEqCan { cc_id = cv, cc_flavor = ifl, cc_tyvar = tv, cc_rhs = xi }) 
                     (CIPCan { cc_id = ipid, cc_flavor = wfl, cc_ip_nm = nm, cc_ip_ty = ty }) 
   | ifl `canRewrite` wfl
@@ -1175,9 +1202,21 @@ rewriteDict (cv,tv,xi) (dv,gw,cl,xis)
                           , cc_class = cl 
                           , cc_tyargs = args }) } 
 
+rewriteIrred :: (CoVar,TcTyVar,Xi) -> (EvVar,CtFlavor,TcType) -> TcS WorkList 
+rewriteIrred (cv,tv,xi) (id,gw,ty)
+  = do { let co = liftCoSubstWith [tv] [mkCoVarCo cv] ty     -- ty[tv] ~ ty[xi]
+             ty'   = substTyWith  [tv] [xi] ty
+       ; id' <- newCoVar ty' 
+       ; case gw of 
+           Wanted {}         -> setEvBind id  (EvCast id' (mkSymCo co))
+           Given {}          -> setEvBind id' (EvCast id co) 
+           Derived {}        -> return () -- Derived ips: we don't set any evidence
+
+       ; mkCanonical gw id' }
+
 rewriteIP :: (CoVar,TcTyVar,Xi) -> (EvVar,CtFlavor, IPName Name, TcType) -> TcS CanonicalCt 
 rewriteIP (cv,tv,xi) (ipid,gw,nm,ty) 
-  = do { let ip_co = liftCoSubstWith [tv] [mkCoVarCo cv] ty     -- ty[tv] ~ t[xi]
+  = do { let ip_co = liftCoSubstWith [tv] [mkCoVarCo cv] ty     -- ty[tv] ~ ty[xi]
              ty'   = substTyWith   [tv] [xi] ty
        ; ipid' <- newIPVar nm ty' 
        ; case gw of 
@@ -1744,7 +1783,7 @@ doTopReact _inerts workItem@(CDictCan { cc_flavor = Derived loc
                                       , cc_class = cls, cc_tyargs = xis })
   = do { instEnvs <- getInstEnvs
        ; let fd_eqns = improveFromInstEnv instEnvs
-                                                (ClassP cls xis, pprArisingAt loc)
+                                                (mkClassPred cls xis, pprArisingAt loc)
        ; m <- rewriteWithFunDeps fd_eqns xis loc
        ; case m of
            Nothing -> return NoTopInt
@@ -1764,7 +1803,7 @@ doTopReact inerts workItem@(CDictCan { cc_flavor = fl@(Wanted loc)
   -- See Note [MATCHING-SYNONYMS]
   = do { traceTcS "doTopReact" (ppr workItem)
        ; instEnvs <- getInstEnvs
-       ; let fd_eqns = improveFromInstEnv instEnvs $ (ClassP cls xis, pprArisingAt loc)
+       ; let fd_eqns = improveFromInstEnv instEnvs $ (mkClassPred cls xis, pprArisingAt loc)
 
        ; any_fundeps <- rewriteWithFunDeps fd_eqns xis loc
        ; case any_fundeps of
@@ -2084,7 +2123,7 @@ matchClassInst inerts clas tys loc
             MatchInstSingle (_,_)
               | given_overlap untch -> 
                   do { traceTcS "Delaying instance application" $ 
-                       vcat [ text "Workitem=" <+> pprPredTy (ClassP clas tys)
+                       vcat [ text "Workitem=" <+> pprType (mkClassPred clas tys)
                             , text "Relevant given dictionaries=" <+> ppr givens_for_this_clas ]
                      ; return NoInstance -- see Note [Instance and Given overlap]
                      }

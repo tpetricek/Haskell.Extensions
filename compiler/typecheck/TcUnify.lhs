@@ -127,7 +127,7 @@ matchExpectedFunTys herald arity orig_ty
       | Just ty' <- tcView ty = go n_req ty'
 
     go n_req (FunTy arg_ty res_ty)
-      | not (isPredTy arg_ty) 
+      | not (isPredTy arg_ty)
       = do { (coi, tys, ty_r) <- go (n_req-1) res_ty
            ; return (mkFunCo (mkReflCo arg_ty) coi, arg_ty:tys, ty_r) }
 
@@ -458,7 +458,7 @@ unifyType ty1 ty2 = uType [] ty1 ty2
 ---------------
 unifyPred :: PredType -> PredType -> TcM Coercion
 -- Actual and expected types
-unifyPred p1 p2 = uPred [UnifyOrigin (mkPredTy p1) (mkPredTy p2)] p1 p2
+unifyPred = unifyType
 
 ---------------
 unifyTheta :: TcThetaType -> TcThetaType -> TcM [Coercion]
@@ -578,9 +578,6 @@ uType_np origin orig_ty1 orig_ty2
       | Just ty1' <- tcView ty1 = go ty1' ty2
       | Just ty2' <- tcView ty2 = go ty1  ty2'
       	     
-        -- Predicates
-    go (PredTy p1) (PredTy p2) = uPred origin p1 p2
-
         -- Functions (or predicate functions) just check the two parts
     go (FunTy fun1 arg1) (FunTy fun2 arg2)
       = do { coi_l <- uType origin fun1 fun2
@@ -645,25 +642,6 @@ unifySigmaTy origin ty1 ty2
 
        ; emitConstraints lie
        ; return (foldr mkForAllCo coi skol_tvs) }
-
-----------
-uPred :: [EqOrigin] -> PredType -> PredType -> TcM Coercion
-uPred origin (IParam n1 t1) (IParam n2 t2)
-  | n1 == n2
-  = do { coi <- uType origin t1 t2
-       ; return $ mkPredCo $ IParam n1 coi }
-uPred origin (ClassP c1 tys1) (ClassP c2 tys2)
-  | c1 == c2 
-  = do { cois <- uList origin uType tys1 tys2
-          -- Guaranteed equal lengths because the kinds check
-       ; return $ mkPredCo $ ClassP c1 cois }
-
-uPred origin (EqPred ty1a ty1b) (EqPred ty2a ty2b)
-  = do { coa <- uType origin ty1a ty2a
-       ; cob <- uType origin ty1b ty2b
-       ; return $ mkPredCo $ EqPred coa cob }
-
-uPred origin _ _ = failWithMisMatch origin
 
 ---------------
 uList :: [EqOrigin] 
@@ -934,7 +912,6 @@ checkTauTvUpdate tv ty
           = Just (TyConApp tc tys') 
           | isSynTyCon tc, Just ty_expanded <- tcView this_ty
           = ok ty_expanded -- See Note [Type synonyms and the occur check] 
-        ok (PredTy sty) | Just sty' <- ok_pred sty = Just (PredTy sty') 
         ok (FunTy arg res) | Just arg' <- ok arg, Just res' <- ok res
                            = Just (FunTy arg' res') 
         ok (AppTy fun arg) | Just fun' <- ok fun, Just arg' <- ok arg 
@@ -942,16 +919,6 @@ checkTauTvUpdate tv ty
         ok (ForAllTy tv1 ty1) | Just ty1' <- ok ty1 = Just (ForAllTy tv1 ty1') 
         -- Fall-through 
         ok _ty = Nothing 
-       
-        ok_pred (IParam nm ty) | Just ty' <- ok ty = Just (IParam nm ty') 
-        ok_pred (ClassP cl tys) 
-          | Just tys' <- allMaybes (map ok tys) 
-          = Just (ClassP cl tys') 
-        ok_pred (EqPred ty1 ty2) 
-          | Just ty1' <- ok ty1, Just ty2' <- ok ty2 
-          = Just (EqPred ty1' ty2') 
-        -- Fall-through 
-        ok_pred _pty = Nothing 
 \end{code}
 
 Note [Avoid deferring]

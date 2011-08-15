@@ -27,7 +27,7 @@ module Kind (
 
         -- ** Predicates on Kinds
         isLiftedTypeKind, isUnliftedTypeKind, isOpenTypeKind,
-        isUbxTupleKind, isArgTypeKind, isKind, isTySuperKind, 
+        isUbxTupleKind, isArgTypeKind, isFactKind, isKind, isTySuperKind, 
         isSuperKind, 
         isLiftedTypeKindCon,
 
@@ -71,14 +71,27 @@ isLiftedTypeKindCon tc    = tc `hasKey` liftedTypeKindTyConKey
 %************************************************************************
 
 \begin{code}
+the :: Eq a => [a] -> Maybe a
+the []     = error "the: must supply at least one argument"
+the (x:xs) = go x xs
+  where go x []     = Just x
+        go x (y:ys) | x == y    = go x ys
+                    | otherwise = Nothing
+
 typeKind :: Type -> Kind
-typeKind _ty@(TyConApp tc tys) 
-  = ASSERT2( not (tc `hasKey` eqPredPrimTyConKey) || length tys == 2, ppr _ty )
+typeKind ty@(TyConApp tc tys) 
+  | isTupleTyCon tc
+  , tyConArity tc == length tys
+  = case the (map typeKind tys) of
+      Just k  -> k
+      Nothing -> pprPanic "typeKind: insane tuple kinds" (ppr ty)
+
+  | otherwise
+  = ASSERT2( not (tc `hasKey` eqPredPrimTyConKey) || length tys == 2, ppr ty )
     	     -- Assertion checks for unsaturated application of (~)
 	     -- See Note [The (~) TyCon] in TysPrim
     kindAppResult (tyConKind tc) tys
 
-typeKind (PredTy pred)	      = predKind pred
 typeKind (AppTy fun _)        = kindFunResult (typeKind fun)
 typeKind (ForAllTy _ ty)      = typeKind ty
 typeKind (TyVarTy tyvar)      = tyVarKind tyvar
@@ -93,11 +106,6 @@ typeKind (FunTy _arg res)
     where
       k = typeKind res
 
-------------------
-predKind :: PredType -> Kind
-predKind (EqPred {}) = unliftedTypeKind	-- Coercions are unlifted
-predKind (ClassP {}) = liftedTypeKind	-- Class and implicitPredicates are
-predKind (IParam {}) = liftedTypeKind 	-- always represented by lifted types
 \end{code}
 
 %************************************************************************
@@ -141,9 +149,9 @@ synTyConResKind :: TyCon -> Kind
 synTyConResKind tycon = kindAppResult (tyConKind tycon) (tyConTyVars tycon)
 
 -- | See "Type#kind_subtyping" for details of the distinction between these 'Kind's
-isUbxTupleKind, isOpenTypeKind, isArgTypeKind, isUnliftedTypeKind :: Kind -> Bool
+isUbxTupleKind, isOpenTypeKind, isArgTypeKind, isUnliftedTypeKind, isFactKind :: Kind -> Bool
 isOpenTypeKindCon, isUbxTupleKindCon, isArgTypeKindCon,
-        isUnliftedTypeKindCon, isSubArgTypeKindCon      :: TyCon -> Bool
+        isUnliftedTypeKindCon, isSubArgTypeKindCon, isFactKindCon      :: TyCon -> Bool
 
 isOpenTypeKindCon tc    = tyConUnique tc == openTypeKindTyConKey
 
@@ -165,6 +173,11 @@ isUnliftedTypeKindCon tc = tyConUnique tc == unliftedTypeKindTyConKey
 isUnliftedTypeKind (TyConApp tc _) = isUnliftedTypeKindCon tc
 isUnliftedTypeKind _               = False
 
+isFactKindCon tc = tyConUnique tc == factKindTyConKey
+
+isFactKind (TyConApp tc _) = isFactKindCon tc
+isFactKind _               = False
+
 isSubOpenTypeKind :: Kind -> Bool
 -- ^ True of any sub-kind of OpenTypeKind (i.e. anything except arrow)
 isSubOpenTypeKind (FunTy k1 k2)    = ASSERT2 ( isKind k1, text "isSubOpenTypeKind" <+> ppr k1 <+> text "::" <+> ppr (typeKind k1) ) 
@@ -180,6 +193,7 @@ isSubArgTypeKindCon kc
   | isUnliftedTypeKindCon kc = True
   | isLiftedTypeKindCon kc   = True
   | isArgTypeKindCon kc      = True
+  | isFactKindCon kc         = True
   | otherwise                = False
 
 isSubArgTypeKind :: Kind -> Bool

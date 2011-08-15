@@ -43,7 +43,6 @@ module TcType (
   tcSplitFunTy_maybe, tcSplitFunTys, tcFunArgTy, tcFunResultTy, tcSplitFunTysN,
   tcSplitTyConApp, tcSplitTyConApp_maybe, tcTyConAppTyCon, tcTyConAppArgs,
   tcSplitAppTy_maybe, tcSplitAppTy, tcSplitAppTys, repSplitAppTy_maybe,
-  tcSplitPredTy_maybe,
   tcInstHeadTyNotSynonym, tcInstHeadTyAppAllTyVars,
   tcGetTyVar_maybe, tcGetTyVar,
   tcSplitSigmaTy, tcDeepSplitSigmaTy_maybe,  
@@ -69,6 +68,7 @@ module TcType (
 
   ---------------------------------
   -- Predicate types  
+  PredTree(..), predTreePredType, predTypePredTree,
   mkMinimalBySCs, transSuperClasses, immSuperClasses,
   getClassPredTys, getClassPredTys_maybe,
 
@@ -115,13 +115,13 @@ module TcType (
 
   --------------------------------
   -- Rexported from Type
-  Type, Pred(..), PredType, ThetaType,
+  Type, PredType, ThetaType,
   mkForAllTy, mkForAllTys, 
   mkFunTy, mkFunTys, zipFunTys, 
   mkTyConApp, mkAppTy, mkAppTys, applyTy, applyTys,
-  mkTyVarTy, mkTyVarTys, mkTyConTy, mkPredTy, mkPredTys, 
+  mkTyVarTy, mkTyVarTys, mkTyConTy,
 
-  isClassPred, isEqPred, isIPPred,
+  isClassPred, isEqPred, isIPPred, isIrredPred,
   mkClassPred, mkIPPred, mkDictTy,
   isDictLikeTy,
   tcSplitDFunTy, tcSplitDFunHead, 
@@ -485,7 +485,6 @@ tidyType env@(_, subst) ty
 				Just tv' -> expand tv'
     go (TyConApp tycon tys) = let args = map go tys
 			      in args `seqList` TyConApp tycon args
-    go (PredTy sty)	    = PredTy (tidyPred env sty)
     go (AppTy fun arg)	    = (AppTy $! (go fun)) $! (go arg)
     go (FunTy fun arg)	    = (FunTy $! (go fun)) $! (go arg)
     go (ForAllTy tv ty)	    = ForAllTy tvp $! (tidyType envp ty)
@@ -503,12 +502,6 @@ tidyType env@(_, subst) ty
 ---------------
 tidyTypes :: TidyEnv -> [Type] -> [Type]
 tidyTypes env tys = map (tidyType env) tys
-
----------------
-tidyPred :: TidyEnv -> PredType -> PredType
-tidyPred env (IParam n ty)     = IParam n (tidyType env ty)
-tidyPred env (ClassP clas tys) = ClassP clas (tidyTypes env tys)
-tidyPred env (EqPred ty1 ty2)  = EqPred (tidyType env ty1) (tidyType env ty2)
 
 ---------------
 -- | Grabs the free type variables, tidies them
@@ -587,15 +580,6 @@ tcTyFamInsts (TyConApp tc tys)
 tcTyFamInsts (FunTy ty1 ty2)      = tcTyFamInsts ty1 ++ tcTyFamInsts ty2
 tcTyFamInsts (AppTy ty1 ty2)      = tcTyFamInsts ty1 ++ tcTyFamInsts ty2
 tcTyFamInsts (ForAllTy _ ty)      = tcTyFamInsts ty
-tcTyFamInsts (PredTy pty)         = tcPredFamInsts pty
-
--- | Finds type family instances occuring in a predicate type after expanding 
--- synonyms.
-tcPredFamInsts :: PredType -> [(TyCon, [Type])]
-tcPredFamInsts (ClassP _cla tys) = concat (map tcTyFamInsts tys)
-tcPredFamInsts (IParam _ ty)     = tcTyFamInsts ty
-tcPredFamInsts (EqPred ty1 ty2)  = tcTyFamInsts ty1 ++ tcTyFamInsts ty2
-
 \end{code}
 
 %************************************************************************
@@ -642,14 +626,9 @@ exactTyVarsOfType ty
     go ty | Just ty' <- tcView ty = go ty'  -- This is the key line
     go (TyVarTy tv)         = unitVarSet tv
     go (TyConApp _ tys)     = exactTyVarsOfTypes tys
-    go (PredTy ty)      = go_pred ty
     go (FunTy arg res)      = go arg `unionVarSet` go res
     go (AppTy fun arg)      = go fun `unionVarSet` go arg
     go (ForAllTy tyvar ty)  = delVarSet (go ty) tyvar
-
-    go_pred (IParam _ ty)    = go ty
-    go_pred (ClassP _ tys)   = exactTyVarsOfTypes tys
-    go_pred (EqPred ty1 ty2) = go ty1 `unionVarSet` go ty2
 
 exactTyVarsOfTypes :: [Type] -> TyVarSet
 exactTyVarsOfTypes tys = foldr (unionVarSet . exactTyVarsOfType) emptyVarSet tys
@@ -756,7 +735,7 @@ mkSigmaTy :: [TyVar] -> [PredType] -> Type -> Type
 mkSigmaTy tyvars theta tau = mkForAllTys tyvars (mkPhiTy theta tau)
 
 mkPhiTy :: [PredType] -> Type -> Type
-mkPhiTy theta ty = foldr (\p r -> mkFunTy (mkPredTy p) r) ty theta
+mkPhiTy theta ty = foldr mkFunTy ty theta
 \end{code}
 
 @isTauTy@ tests for nested for-alls.  It should not be called on a boxy type.
@@ -768,7 +747,6 @@ isTauTy (TyVarTy _)	  = True
 isTauTy (TyConApp tc tys) = all isTauTy tys && isTauTyCon tc
 isTauTy (AppTy a b)	  = isTauTy a && isTauTy b
 isTauTy (FunTy a b)	  = isTauTy a && isTauTy b
-isTauTy (PredTy _)	  = True		-- Don't look through source types
 isTauTy _    		  = False
 
 isTauTyCon :: TyCon -> Bool
@@ -798,8 +776,7 @@ getDFunTyKey ty		     = pprPanic "getDFunTyKey" (pprType ty)
 %************************************************************************
 
 These tcSplit functions are like their non-Tc analogues, but
-	a) they do not look through newtypes
-	b) they do not look through PredTys
+	*) they do not look through newtypes
 
 However, they are non-monadic and do not follow through mutable type
 variables.  It's up to you to make sure this doesn't matter.
@@ -822,7 +799,7 @@ tcSplitPredFunTy_maybe :: Type -> Maybe (PredType, Type)
 tcSplitPredFunTy_maybe ty 
   | Just ty' <- tcView ty = tcSplitPredFunTy_maybe ty'
 tcSplitPredFunTy_maybe (FunTy arg res)
-  | Just p <- tcSplitPredTy_maybe arg = Just (p, res)
+  | isPredTy arg = Just (arg, res)
 tcSplitPredFunTy_maybe _
   = Nothing
 
@@ -894,7 +871,7 @@ tcSplitFunTy_maybe :: Type -> Maybe (Type, Type)
 tcSplitFunTy_maybe ty | Just ty' <- tcView ty           = tcSplitFunTy_maybe ty'
 tcSplitFunTy_maybe (FunTy arg res) | not (isPredTy arg) = Just (arg, res)
 tcSplitFunTy_maybe _                                    = Nothing
-	-- Note the (not (isPredTy arg)) guard
+	-- Note the typeKind guard
 	-- Consider	(?x::Int) => Bool
 	-- We don't want to treat this as a function type!
 	-- A concrete example is test tc230:
@@ -976,10 +953,7 @@ tcSplitDFunTy ty
     split_dfun_args n ty               = (n, ty)
 
 tcSplitDFunHead :: Type -> (Class, [Type])
-tcSplitDFunHead tau  
-  = case tcSplitPredTy_maybe tau of 
-	Just (ClassP clas tys) -> (clas, tys)
-	_ -> pprPanic "tcSplitDFunHead" (ppr tau)
+tcSplitDFunHead tau = getClassPredTys
 
 tcInstHeadTyNotSynonym :: Type -> Bool
 -- Used in Haskell-98 mode, for the argument types of an instance head
@@ -1020,32 +994,58 @@ tcInstHeadTyAppAllTyVars ty
 %*									*
 %************************************************************************
 
+Decomposing PredType
+
+\begin{code}
+data PredTree = ClassPred Class [Type]
+              | EqPred Type Type
+              | IPPred (IPName Name) Type
+              | TuplePred [PredTree]
+              | IrredPred PredType
+
+predTreePredType :: PredTree -> PredType
+predTreePredType (ClassPred clas tys) = mkClassPred clas tys
+predTreePredType (EqPred ty1 ty2)     = mkEqPred ty1 ty2
+predTreePredType (IPPred ip ty)       = mkIPPred ip ty
+predTreePredType (TuplePred tys)      = mkTupleTy (map predTreePredType tys)
+predTreePredType (IrredPred ty)       = ty
+
+predTypePredTree :: PredType -> PredTree
+predTypePredTree ev_ty = case splitTyConApp_maybe ev_ty of
+    Just (tc, tys) | Just clas <- tyConClass_maybe tc
+                   -> ClassPred clas tys
+    Just (tc, tys) | tc `hasKey` eqTyConKey
+                   , let [ty1, ty2] = tys
+                   -> EqPred ty1 ty2
+    Just (tc, tys) | Just ip <- tyConIP_maybe tc
+                   , let [ty] = tys
+                   -> IPPred ip ty
+    Just (tc, tys) | isTupleTyCon tc
+                   -> TuplePred (map predTypePredTree tys)
+    _ -> IrredPred ev_ty
+\end{code}
+
 Deconstructors and tests on predicate types
 
 \begin{code}
-tcSplitPredTy_maybe :: Type -> Maybe PredType
--- Returns Just for predicates only
-tcSplitPredTy_maybe ty | Just ty' <- tcView ty = tcSplitPredTy_maybe ty'
-tcSplitPredTy_maybe (PredTy p)    = Just p
-tcSplitPredTy_maybe _             = Nothing
-
-isPredTy :: Type -> Bool
-isPredTy ty = isJust (tcSplitPredTy_maybe ty)
-
 isTyVarClassPred :: PredType -> Bool
-isTyVarClassPred (ClassP _ tys) = all isTyVarTy tys
-isTyVarClassPred _              = False
+isTyVarClassPred ty = case getClassPredTys_maybe of
+    Just (_, tys) -> all isTyVarTy tys
+    _             -> False
 
 getClassPredTys_maybe :: PredType -> Maybe (Class, [Type])
-getClassPredTys_maybe (ClassP clas tys) = Just (clas, tys)
-getClassPredTys_maybe _                 = Nothing
+getClassPredTys_maybe ty = case tcSplitTyConApp_maybe ty of 
+        Just (tc, tys) | Just clas <- tyConClass_maybe -> Just (clas, tys)
+        _ -> Nothing
 
 getClassPredTys :: PredType -> (Class, [Type])
-getClassPredTys (ClassP clas tys) = (clas, tys)
-getClassPredTys _ = panic "getClassPredTys"
+getClassPredTys ty = case getClassPredTys_maybe ty of
+        Just (clas, tys) -> (clas, tys)
+        Nothing          -> pprPanic "getClassPredTys" (ppr ty)
 
 evVarPred_maybe :: EvVar -> Maybe PredType
-evVarPred_maybe = tcSplitPredTy_maybe . varType
+evVarPred_maybe v = if isPredTy ty then Just ty else Nothing
+  where ty = varType v
 
 evVarPred :: EvVar -> PredType
 evVarPred var
@@ -1062,20 +1062,25 @@ mkMinimalBySCs :: [PredType] -> [PredType]
 mkMinimalBySCs ptys = [ ploc |  ploc <- ptys
                              ,  ploc `not_in_preds` rec_scs ]
  where
-   rec_scs = concatMap trans_super_classes ptys
+   rec_scs = concatMap (trans_super_classes . predTypePredTree) ptys
    not_in_preds p ps = null (filter (eqPred p) ps)
-   trans_super_classes (ClassP cls tys) = transSuperClasses cls tys
-   trans_super_classes _other_pty       = []
+   trans_super_classes (ClassPred cls tys) = transSuperClasses cls tys
+   trans_super_classes (TuplePred ts)      = concatMap trans_super_classes ts
+   trans_super_classes _other_pty          = []
 
 transSuperClasses :: Class -> [Type] -> [PredType]
 transSuperClasses cls tys
   = foldl (\pts p -> trans_sc p ++ pts) [] $
     immSuperClasses cls tys
-  where trans_sc :: PredType -> [PredType]
-        trans_sc this_pty@(ClassP cls tys)
-          = foldl (\pts p -> trans_sc p ++ pts) [this_pty] $
+  where trans_sc :: PredTree -> [PredType]
+        trans_sc = trans_sc' . predTypePredTree
+
+        trans_sc' ptree@(ClassPred cls tys)
+          = foldl (\pts p -> trans_sc p ++ pts) [predTreePredType ptree] $
             immSuperClasses cls tys
-        trans_sc pty = [pty]
+        trans_sc' ptree@(TuplePred ts)
+          = foldl (\pts t -> trans_sc' t ++ pts) [predTreePredType ptree] ts
+        trans_sc' ptree = [predTreePredType ptree]
 
 immSuperClasses :: Class -> [Type] -> [PredType]
 immSuperClasses cls tys
@@ -1166,7 +1171,6 @@ tcTyVarsOfType :: Type -> TcTyVarSet
 tcTyVarsOfType (TyVarTy tv)	    = if isTcTyVar tv then unitVarSet tv
 						      else emptyVarSet
 tcTyVarsOfType (TyConApp _ tys)     = tcTyVarsOfTypes tys
-tcTyVarsOfType (PredTy sty)	    = tcTyVarsOfPred sty
 tcTyVarsOfType (FunTy arg res)	    = tcTyVarsOfType arg `unionVarSet` tcTyVarsOfType res
 tcTyVarsOfType (AppTy fun arg)	    = tcTyVarsOfType fun `unionVarSet` tcTyVarsOfType arg
 tcTyVarsOfType (ForAllTy tyvar ty)  = tcTyVarsOfType ty `delVarSet` tyvar
@@ -1174,28 +1178,23 @@ tcTyVarsOfType (ForAllTy tyvar ty)  = tcTyVarsOfType ty `delVarSet` tyvar
 
 tcTyVarsOfTypes :: [Type] -> TyVarSet
 tcTyVarsOfTypes tys = foldr (unionVarSet.tcTyVarsOfType) emptyVarSet tys
-
-tcTyVarsOfPred :: PredType -> TyVarSet
-tcTyVarsOfPred (IParam _ ty)  	= tcTyVarsOfType ty
-tcTyVarsOfPred (ClassP _ tys) 	= tcTyVarsOfTypes tys
-tcTyVarsOfPred (EqPred ty1 ty2) = tcTyVarsOfType ty1 `unionVarSet` tcTyVarsOfType ty2
 \end{code}
 
 Find the free tycons and classes of a type.  This is used in the front
 end of the compiler.
 
 \begin{code}
+orphNamesOfTyCon :: TyCon -> NameSet
+orphNamesOfTyCon tycon = unitNameSet (getName tycon) `unionNameSets` case tyConClass_maybe of
+    Nothing  -> emptyNameSet
+    Just cls -> unitNameSet (getName cls)
+
 orphNamesOfType :: Type -> NameSet
 orphNamesOfType ty | Just ty' <- tcView ty = orphNamesOfType ty'
 		-- Look through type synonyms (Trac #4912)
 orphNamesOfType (TyVarTy _)		   = emptyNameSet
-orphNamesOfType (TyConApp tycon tys)       = unitNameSet (getName tycon) 
+orphNamesOfType (TyConApp tycon tys)       = orphNamesOfTyCon tycon
                                              `unionNameSets` orphNamesOfTypes tys
-orphNamesOfType (PredTy (IParam _ ty))    = orphNamesOfType ty
-orphNamesOfType (PredTy (ClassP cl tys))  = unitNameSet (getName cl) 
-                                            `unionNameSets` orphNamesOfTypes tys
-orphNamesOfType (PredTy (EqPred ty1 ty2)) = orphNamesOfType ty1 
-                                            `unionNameSets` orphNamesOfType ty2
 orphNamesOfType (FunTy arg res)	    = orphNamesOfType arg `unionNameSets` orphNamesOfType res
 orphNamesOfType (AppTy fun arg)	    = orphNamesOfType fun `unionNameSets` orphNamesOfType arg
 orphNamesOfType (ForAllTy _ ty)	    = orphNamesOfType ty

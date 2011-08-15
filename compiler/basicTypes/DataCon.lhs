@@ -535,8 +535,8 @@ mkDataCon name declared_infix
 	-- source-language arguments.  We add extra ones for the
 	-- dictionary arguments right here.
     full_theta   = eqSpecPreds eq_spec ++ theta
-    real_arg_tys = mkPredTys full_theta               ++ orig_arg_tys
-    real_stricts = map mk_dict_strict_mark full_theta ++ arg_stricts
+    real_arg_tys = full_theta                      ++ orig_arg_tys
+    real_stricts = map (const HsNoBang) full_theta ++ arg_stricts
 
 	-- Representation arguments and demands
 	-- To do: eliminate duplication with MkId
@@ -549,10 +549,6 @@ mkDataCon name declared_infix
 
 eqSpecPreds :: [(TyVar,Type)] -> ThetaType
 eqSpecPreds spec = [ mkEqPred (mkTyVarTy tv, ty) | (tv,ty) <- spec ]
-
-mk_dict_strict_mark :: PredType -> HsBang
-mk_dict_strict_mark pred | isStrictPred pred = HsStrict
-		         | otherwise	     = HsNoBang
 \end{code}
 
 \begin{code}
@@ -746,7 +742,7 @@ dataConUserType  (MkData { dcUnivTyVars = univ_tvs,
 			   dcOtherTheta = theta, dcOrigArgTys = arg_tys,
 			   dcOrigResTy = res_ty })
   = mkForAllTys ((univ_tvs `minusList` map fst eq_spec) ++ ex_tvs) $
-    mkFunTys (mkPredTys theta) $
+    mkFunTys theta $
     mkFunTys arg_tys $
     res_ty
 

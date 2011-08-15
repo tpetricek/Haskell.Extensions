@@ -1137,14 +1137,6 @@ zonkRttiType = zonkType (mkZonkTcTyVar zonk_unbound_meta)
 --------------------------------------------------------------------------------
 -- Restore Class predicates out of a representation type
 dictsView :: Type -> Type
--- dictsView ty = ty
-dictsView (FunTy (TyConApp tc_dict args) ty)
-  | Just c <- tyConClass_maybe tc_dict
-  = FunTy (PredTy (ClassP c args)) (dictsView ty)
-dictsView ty
-  | Just (tc_fun, [TyConApp tc_dict args, ty2]) <- tcSplitTyConApp_maybe ty
-  , Just c <- tyConClass_maybe tc_dict
-  = mkTyConApp tc_fun [PredTy (ClassP c args), dictsView ty2]
 dictsView ty = ty
 
 

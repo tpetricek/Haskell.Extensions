@@ -650,16 +650,16 @@ dsHsPred :: HsPred Name -> TcM PredType
 dsHsPred (HsClassP class_name tys)
   = do { arg_tys <- dsHsTypes tys
        ; clas <- tcLookupClass class_name
-       ; return (ClassP clas arg_tys)
+       ; return (mkClassPred clas arg_tys)
        }
 dsHsPred (HsEqualP ty1 ty2)
   = do { arg_ty1 <- dsHsType ty1
        ; arg_ty2 <- dsHsType ty2
-       ; return (EqPred arg_ty1 arg_ty2)
+       ; return (mkLiftedEqPred arg_ty1 arg_ty2)
        }
 dsHsPred (HsIParam name ty)
   = do { arg_ty <- dsHsType ty
-       ; return (IParam name arg_ty)
+       ; return (mkIPPred name arg_ty)
        }
 \end{code}
 

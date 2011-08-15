@@ -68,7 +68,7 @@ buildPADict vect_tc prepr_tc arr_tc repr
       pa_cls <- builtin paClass
       let dfun_ty = mkForAllTys tvs
 		  $ mkFunTys (map varType args)
-                             (PredTy $ ClassP pa_cls [inst_ty])
+                             (mkClassPred pa_cls [inst_ty])
 
       -- Set the unfolding for the inliner.
       raw_dfun <- newExportedVar dfun_name dfun_ty

@@ -896,10 +896,7 @@ instance Binary IfaceType where
 	    putByte bh 3
 	    put_ bh ag
 	    put_ bh ah
-    put_ bh (IfacePredTy aq) = do
-	    putByte bh 5
-	    put_ bh aq
-
+    
 	-- Simple compression for common cases of TyConApp
     put_ bh (IfaceTyConApp IfaceIntTc  [])   = putByte bh 6
     put_ bh (IfaceTyConApp IfaceCharTc [])   = putByte bh 7
@@ -936,9 +933,7 @@ instance Binary IfaceType where
 	      3 -> do ag <- get bh
 		      ah <- get bh
 		      return (IfaceFunTy ag ah)
-	      5 -> do ap <- get bh
-		      return (IfacePredTy ap)
-
+	      
 		-- Now the special cases for TyConApp
 	      6 -> return (IfaceTyConApp IfaceIntTc [])
 	      7 -> return (IfaceTyConApp IfaceCharTc [])
@@ -1009,33 +1004,6 @@ instance Binary IfaceCoCon where
 	  4 -> return IfaceTransCo
 	  5 -> return IfaceInstCo
           _ -> do { d <- get bh; return (IfaceNthCo d) }
-
-instance Binary IfacePredType where
-    put_ bh (IfaceClassP aa ab) = do
-	    putByte bh 0
-	    put_ bh aa
-	    put_ bh ab
-    put_ bh (IfaceIParam ac ad) = do
-	    putByte bh 1
-	    put_ bh ac
-	    put_ bh ad
-    put_ bh (IfaceEqPred ac ad) = do
-	    putByte bh 2
-	    put_ bh ac
-	    put_ bh ad
-    get bh = do
-	    h <- getByte bh
-	    case h of
-	      0 -> do aa <- get bh
-		      ab <- get bh
-		      return (IfaceClassP aa ab)
-	      1 -> do ac <- get bh
-		      ad <- get bh
-		      return (IfaceIParam ac ad)
-	      2 -> do ac <- get bh
-		      ad <- get bh
-		      return (IfaceEqPred ac ad)
-	      _ -> panic ("get IfacePredType " ++ show h)
 
 -------------------------------------------------------------------------
 --		IfaceExpr and friends

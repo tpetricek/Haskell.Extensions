@@ -9,7 +9,7 @@ This module defines interface types and binders
 module IfaceType (
 	IfExtName, IfLclName,
 
-        IfaceType(..), IfaceKind, IfacePredType(..), IfaceTyCon(..), IfaceCoCon(..),
+        IfaceType(..), IfaceKind, IfaceTyCon(..), IfaceCoCon(..),
 	IfaceContext, IfaceBndr(..), IfaceTvBndr, IfaceIdBndr, IfaceCoercion,
 	ifaceTyConName,
 
@@ -69,17 +69,11 @@ data IfaceType	   -- A kind of universal type, used for types, kinds, and coerci
   | IfaceAppTy    IfaceType IfaceType
   | IfaceFunTy    IfaceType IfaceType
   | IfaceForAllTy IfaceTvBndr IfaceType
-  | IfacePredTy   IfacePredType
   | IfaceTyConApp IfaceTyCon [IfaceType]  -- Not necessarily saturated
 					  -- Includes newtypes, synonyms, tuples
   | IfaceCoConApp IfaceCoCon [IfaceType]  -- Always saturated
 
-data IfacePredType 	-- NewTypes are handled as ordinary TyConApps
-  = IfaceClassP IfExtName [IfaceType]
-  | IfaceIParam (IPName OccName) IfaceType
-  | IfaceEqPred IfaceType IfaceType
-
-type IfaceContext = [IfacePredType]
+type IfaceContext = [IfaceType]
 
 data IfaceTyCon 	-- Encodes type consructors, kind constructors
      			-- coercion constructors, the lot
@@ -137,21 +131,16 @@ than solve this potential problem now, I'm going to defer it until it happens!
 
 
 \begin{code}
-splitIfaceSigmaTy :: IfaceType -> ([IfaceTvBndr], IfaceContext, IfaceType)
+splitIfaceSigmaTy :: IfaceType -> ([IfaceTvBndr], IfaceType)
 -- Mainly for printing purposes
 splitIfaceSigmaTy ty
-  = (tvs,theta,tau)
+  = (tvs, rho)
   where
     (tvs, rho)   = split_foralls ty
-    (theta, tau) = split_rho rho
 
     split_foralls (IfaceForAllTy tv ty) 
 	= case split_foralls ty of { (tvs, rho) -> (tv:tvs, rho) }
     split_foralls rho = ([], rho)
-
-    split_rho (IfaceFunTy (IfacePredTy st) ty) 
-	= case split_rho ty of { (sts, tau) -> (st:sts, tau) }
-    split_rho tau = ([], tau)
 \end{code}
 
 %************************************************************************
@@ -222,7 +211,6 @@ pprParendIfaceType = ppr_ty tYCON_PREC
 ppr_ty :: Int -> IfaceType -> SDoc
 ppr_ty _         (IfaceTyVar tyvar)     = ppr tyvar
 ppr_ty ctxt_prec (IfaceTyConApp tc tys) = ppr_tc_app ctxt_prec tc tys
-ppr_ty _         (IfacePredTy st)       = ppr st
 
 ppr_ty ctxt_prec (IfaceCoConApp tc tys) 
   = maybeParen ctxt_prec tYCON_PREC 
@@ -234,24 +222,27 @@ ppr_ty ctxt_prec (IfaceFunTy ty1 ty2)
     maybeParen ctxt_prec fUN_PREC $
     sep (ppr_ty fUN_PREC ty1 : ppr_fun_tail ty2)
   where
+    arr | ifaceTypeKind ty1 `eqKind` factKind = darrow
+        | otherwise                           = arrow
+
     ppr_fun_tail (IfaceFunTy ty1 ty2) 
-      = (arrow <+> ppr_ty fUN_PREC ty1) : ppr_fun_tail ty2
+      = (arr <+> ppr_ty fUN_PREC ty1) : ppr_fun_tail ty2
     ppr_fun_tail other_ty
-      = [arrow <+> pprIfaceType other_ty]
+      = [arr <+> pprIfaceType other_ty]
 
 ppr_ty ctxt_prec (IfaceAppTy ty1 ty2)
   = maybeParen ctxt_prec tYCON_PREC $
     ppr_ty fUN_PREC ty1 <+> pprParendIfaceType ty2
 
 ppr_ty ctxt_prec ty@(IfaceForAllTy _ _)
-  = maybeParen ctxt_prec fUN_PREC (pprIfaceForAllPart tvs theta (pprIfaceType tau))
+  = maybeParen ctxt_prec fUN_PREC (pprIfaceForAllPart tvs (pprIfaceType tau))
  where		
-    (tvs, theta, tau) = splitIfaceSigmaTy ty
+    (tvs, tau) = splitIfaceSigmaTy ty
     
 -------------------
-pprIfaceForAllPart :: [IfaceTvBndr] -> IfaceContext -> SDoc -> SDoc
-pprIfaceForAllPart tvs ctxt doc 
-  = sep [ppr_tvs, pprIfaceContext ctxt, doc]
+pprIfaceForAllPart :: [IfaceTvBndr] -> SDoc -> SDoc
+pprIfaceForAllPart tvs doc 
+  = sep [ppr_tvs, doc]
   where
     ppr_tvs | null tvs  = empty
 	    | otherwise = ptext (sLit "forall") <+> pprIfaceTvBndrs tvs <> dot
@@ -274,13 +265,6 @@ ppr_tc tc@(IfaceTc ext_nm) = parenSymOcc (getOccName ext_nm) (ppr tc)
 ppr_tc tc		   = ppr tc
 
 -------------------
-instance Outputable IfacePredType where
-	-- Print without parens
-  ppr (IfaceEqPred ty1 ty2)= hsep [ppr ty1, ptext (sLit "~"), ppr ty2]
-  ppr (IfaceIParam ip ty)  = hsep [ppr ip, dcolon, ppr ty]
-  ppr (IfaceClassP cls ts) = parenSymOcc (getOccName cls) (ppr cls)
-			     <+> sep (map pprParendIfaceType ts)
-
 instance Outputable IfaceTyCon where
   ppr (IfaceAnyTc k) = ptext (sLit "Any") <> pprParendIfaceType k
       		       	     -- We can't easily get the Name of an IfaceAnyTc
@@ -297,16 +281,6 @@ instance Outputable IfaceCoCon where
   ppr IfaceInstCo    = ptext (sLit "Inst")
   ppr (IfaceNthCo d) = ptext (sLit "Nth:") <> int d
 
--------------------
-pprIfaceContext :: IfaceContext -> SDoc
--- Prints "(C a, D b) =>", including the arrow
-pprIfaceContext []     = empty
-pprIfaceContext theta = ppr_preds theta <+> darrow
-
-ppr_preds :: [IfacePredType] -> SDoc
-ppr_preds [pred] = ppr pred	-- No parens
-ppr_preds preds  = parens (sep (punctuate comma (map ppr preds))) 
-			 
 -------------------
 pabrackets :: SDoc -> SDoc
 pabrackets p = ptext (sLit "[:") <> p <> ptext (sLit ":]")
@@ -343,7 +317,6 @@ toIfaceType (AppTy t1 t2)     = IfaceAppTy (toIfaceType t1) (toIfaceType t2)
 toIfaceType (FunTy t1 t2)     = IfaceFunTy (toIfaceType t1) (toIfaceType t2)
 toIfaceType (TyConApp tc tys) = IfaceTyConApp (toIfaceTyCon tc) (toIfaceTypes tys)
 toIfaceType (ForAllTy tv t)   = IfaceForAllTy (toIfaceTvBndr tv) (toIfaceType t)
-toIfaceType (PredTy st)       = IfacePredTy (toIfacePred toIfaceType st)
 
 toIfaceTyVar :: TyVar -> FastString
 toIfaceTyVar = occNameFS . getOccName
@@ -391,12 +364,6 @@ toIfaceWiredInTyCon tc nm
 ----------------
 toIfaceTypes :: [Type] -> [IfaceType]
 toIfaceTypes ts = map toIfaceType ts
-
-----------------
-toIfacePred :: (a -> IfaceType) -> Pred a -> IfacePredType
-toIfacePred to (ClassP cls ts)  = IfaceClassP (getName cls) (map to ts)
-toIfacePred to (IParam ip t)    = IfaceIParam (mapIPName getOccName ip) (to t)
-toIfacePred to (EqPred ty1 ty2) =  IfaceEqPred (to ty1) (to ty2)
 
 ----------------
 toIfaceContext :: ThetaType -> IfaceContext

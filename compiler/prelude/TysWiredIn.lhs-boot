@@ -1,0 +1,10 @@
+\begin{code}
+module TysWiredIn where
+
+import {-# SOURCE #-} DataCon    (DataCon)
+import  	      Name 	 (Name)
+import 		      BasicTypes (IPName)
+
+
+ipDataCon :: IPName Name -> DataCon
+\end{code}

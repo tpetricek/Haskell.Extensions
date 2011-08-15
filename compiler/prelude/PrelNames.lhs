@@ -1140,7 +1140,7 @@ addrPrimTyConKey, arrayPrimTyConKey, boolTyConKey, byteArrayPrimTyConKey,
     mutableArrayPrimTyConKey, mutableByteArrayPrimTyConKey,
     orderingTyConKey, mVarPrimTyConKey, ratioTyConKey, rationalTyConKey,
     realWorldTyConKey, stablePtrPrimTyConKey, stablePtrTyConKey,
-    anyTyConKey :: Unique
+    anyTyConKey, eqTyConKey :: Unique
 addrPrimTyConKey                        = mkPreludeTyConUnique  1
 arrayPrimTyConKey                       = mkPreludeTyConUnique  3
 boolTyConKey                            = mkPreludeTyConUnique  4
@@ -1174,6 +1174,7 @@ realWorldTyConKey                       = mkPreludeTyConUnique 34
 stablePtrPrimTyConKey                   = mkPreludeTyConUnique 35
 stablePtrTyConKey                       = mkPreludeTyConUnique 36
 anyTyConKey                             = mkPreludeTyConUnique 37
+eqTyConKey                              = mkPreludeTyConUnique 38
 
 statePrimTyConKey, stableNamePrimTyConKey, stableNameTyConKey,
     mutVarPrimTyConKey, ioTyConKey,
@@ -1225,12 +1226,13 @@ tySuperKindTyConKey                    = mkPreludeTyConUnique 85
 
 -- Kind constructors
 liftedTypeKindTyConKey, openTypeKindTyConKey, unliftedTypeKindTyConKey,
-    ubxTupleKindTyConKey, argTypeKindTyConKey :: Unique
+    ubxTupleKindTyConKey, argTypeKindTyConKey, factKindTyConKey :: Unique
 liftedTypeKindTyConKey                  = mkPreludeTyConUnique 87
 openTypeKindTyConKey                    = mkPreludeTyConUnique 88
 unliftedTypeKindTyConKey                = mkPreludeTyConUnique 89
 ubxTupleKindTyConKey                    = mkPreludeTyConUnique 90
 argTypeKindTyConKey                     = mkPreludeTyConUnique 91
+factKindTyConKey                        = mkPreludeTyConUnique 92
 
 -- Coercion constructors
 symCoercionTyConKey, transCoercionTyConKey, leftCoercionTyConKey,
@@ -1314,7 +1316,7 @@ unitTyConKey = mkTupleTyConUnique Boxed 0
 charDataConKey, consDataConKey, doubleDataConKey, falseDataConKey,
     floatDataConKey, intDataConKey, nilDataConKey, ratioDataConKey,
     stableNameDataConKey, trueDataConKey, wordDataConKey,
-    ioDataConKey, integerDataConKey :: Unique
+    ioDataConKey, integerDataConKey, eqLiftedDataConKey :: Unique
 charDataConKey                          = mkPreludeDataConUnique  1
 consDataConKey                          = mkPreludeDataConUnique  2
 doubleDataConKey                        = mkPreludeDataConUnique  3
@@ -1328,6 +1330,7 @@ trueDataConKey                          = mkPreludeDataConUnique 15
 wordDataConKey                          = mkPreludeDataConUnique 16
 ioDataConKey                            = mkPreludeDataConUnique 17
 integerDataConKey                       = mkPreludeDataConUnique 18
+eqLiftedDataConKey                      = mkPreludeDataConUnique 19
 
 -- Generic data constructors
 crossDataConKey, inlDataConKey, inrDataConKey, genUnitDataConKey :: Unique

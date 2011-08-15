@@ -8,6 +8,7 @@ module BuildTyCl (
 	buildSynTyCon, 
         buildAlgTyCon, 
         buildDataCon,
+        buildIParam,
 	TcMethInfo, buildClass,
 	mkAbstractTyConRhs, 
 	mkNewTyConRhs, mkDataTyConRhs, 
@@ -221,6 +222,34 @@ mkDataConStupidTheta tycon arg_tys univ_tvs
 
 ------------------------------------------------------
 \begin{code}
+buildIParam :: Name -> TcRnIf m n TyCon
+buildIParam ip_name = do
+    -- Reuse the OccName generation for classes for now. May want to revisit this.
+    tycon_name <- newImplicitBinder ip_name mkClassTyConOcc
+    datacon_name <- newImplicitBinder ip_name mkClassDataConOcc
+
+    -- FIXME: must get same tycon/datacon unique everywhere!!
+    -- FIXME: ipTyCon
+    fixM $ \rec_tycon -> do -- Only name generation inside loop
+        let tv = alphaTyVar
+        dict_con <- buildDataCon datacon_name
+                       False    -- Not declared infix
+                       [HsNoBang]
+                       [{- No fields -}]
+                       [tv]
+                       [{- no existentials -}]
+                       [{- No GADT equalities -}] 
+                       [{- No theta -}]
+                       [mkTyVarTy tv]
+                       (mkTyConApp rec_tycon [mkTyVarTy tv])
+                       rec_tycon
+        rhs <- mkNewTyConRhs tycon_name rec_tycon dict_con
+        let ip_kind = mkArrowKind (tyVarKind tv) factKind
+        return $ mkIParamTyCon tycon_name ip_kind tv
+                               rhs rec_clas NonRecursive
+\end{code}
+
+\begin{code}
 type TcMethInfo = (Name, DefMethSpec, Type)  
         -- A temporary intermediate, to communicate between 
         -- tcClassSigs and buildClass.
@@ -277,7 +306,7 @@ buildClass no_unf class_name tvs sc_theta fds ats sig_stuff tc_isrec
 	      args      = sc_sel_names ++ op_names
 	      op_tys	= [ty | (_,_,ty) <- sig_stuff]
 	      op_names  = [op | (op,_,_) <- sig_stuff]
-	      arg_tys   = map mkPredTy sc_theta ++ op_tys
+	      arg_tys   = sc_theta ++ op_tys
               rec_tycon = classTyCon rec_clas
                
 	; dict_con <- buildDataCon datacon_name
@@ -295,7 +324,7 @@ buildClass no_unf class_name tvs sc_theta fds ats sig_stuff tc_isrec
 		 then mkNewTyConRhs tycon_name rec_tycon dict_con
 		 else return (mkDataTyConRhs [dict_con])
 
-	; let {	clas_kind = mkArrowKinds (map tyVarKind tvs) liftedTypeKind
+	; let {	clas_kind = mkArrowKinds (map tyVarKind tvs) factKind
 
  	      ; tycon = mkClassTyCon tycon_name clas_kind tvs
  	                             rhs rec_clas tc_isrec

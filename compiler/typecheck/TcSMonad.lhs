@@ -153,6 +153,12 @@ data CanonicalCt
       cc_ip_ty  :: TcTauType
     }
 
+  | CIrredEvCan {
+      cc_id     :: EvVar,
+      cc_flavor :: CtFlavor,
+      cc_ty     :: Xi
+    }
+
   | CTyEqCan {  -- tv ~ xi	(recall xi means function free)
        -- Invariant: 
        --   * tv not in tvs(xi)   (occurs check)
@@ -197,6 +203,7 @@ tyVarsOfCanonical (CTyEqCan { cc_tyvar = tv, cc_rhs = xi })    = extendVarSet (t
 tyVarsOfCanonical (CFunEqCan { cc_tyargs = tys, cc_rhs = xi }) = tyVarsOfTypes (xi:tys)
 tyVarsOfCanonical (CDictCan { cc_tyargs = tys }) 	       = tyVarsOfTypes tys
 tyVarsOfCanonical (CIPCan { cc_ip_ty = ty })                   = tyVarsOfType ty
+tyVarsOfCanonical (CIrredEvCan { cc_ty = ty })                 = tyVarsOfType ty
 tyVarsOfCanonical (CFrozenErr { cc_id = ev })                  = tyVarsOfEvVar ev
 
 tyVarsOfCDict :: CanonicalCt -> TcTyVarSet 
@@ -214,6 +221,8 @@ instance Outputable CanonicalCt where
       = ppr fl <+> ppr d  <+> dcolon <+> pprClassPred cls tys
   ppr (CIPCan ip fl ip_nm ty)     
       = ppr fl <+> ppr ip <+> dcolon <+> parens (ppr ip_nm <> dcolon <> ppr ty)
+  ppr (CIrredEvCan v fl ty)
+      = ppr fl <+> ppr v <+> dcolon <+> ppr ty
   ppr (CTyEqCan co fl tv ty)      
       = ppr fl <+> ppr co <+> dcolon <+> pprEqPred (Pair (mkTyVarTy tv) ty)
   ppr (CFunEqCan co fl tc tys ty) 
@@ -264,6 +273,10 @@ isCDictCan_Maybe _              = Nothing
 isCIPCan_Maybe :: CanonicalCt -> Maybe (IPName Name)
 isCIPCan_Maybe  (CIPCan {cc_ip_nm = nm }) = Just nm
 isCIPCan_Maybe _                = Nothing
+
+isCIrredEvCan :: CanonicalCt -> Bool
+isCIrredEvCan (CIrredEvCan {}) = True
+isCIrredEvCan _                = False
 
 isCFunEqCan_Maybe :: CanonicalCt -> Maybe TyCon
 isCFunEqCan_Maybe (CFunEqCan { cc_fun = tc }) = Just tc
@@ -771,7 +784,7 @@ checkWellStagedDFun pred dfun_id loc
     bind_lvl = TcM.topIdLvl dfun_id
 
 pprEq :: TcType -> TcType -> SDoc
-pprEq ty1 ty2 = pprPredTy $ mkEqPred (ty1,ty2)
+pprEq ty1 ty2 = pprType $ mkEqPred (ty1,ty2)
 
 isTouchableMetaTyVar :: TcTyVar -> TcS Bool
 isTouchableMetaTyVar tv 
