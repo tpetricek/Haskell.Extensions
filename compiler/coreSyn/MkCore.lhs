@@ -61,7 +61,7 @@ import HscTypes
 import TysWiredIn
 import PrelNames
 
-import TcType		( mkSigmaTy, getIPPredTy_maybe )
+import TcType		( mkSigmaTy )
 import Type
 import Coercion
 import TysPrim

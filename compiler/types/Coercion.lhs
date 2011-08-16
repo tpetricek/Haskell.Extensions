@@ -1076,11 +1076,11 @@ instance Applicative Mk where
     mkf <*> mkx = joinMk ($) mkf mkx
 
 instance Outputable a => Outputable (Mk a) where
-    ppr (Mk xs f) = ppr (f xs)
+    ppr (Mk xs f) = ppr (f [x `setVarType` uncurry mkCoercionType (getEqPredTys (varType x)) | x <- xs])
      -- Cheat and pretend that EqVars are CoVars for pretty-printing
 
 returnMk :: a -> Mk a
-returnMk x = Mk [] (\[] -> x)
+returnMk x = Mk [] (\cvs -> case cvs of { [] -> x; _ -> panic "returnMk" })
 
 unreturnMk_maybe :: Mk a -> Maybe a
 unreturnMk_maybe (Mk [] g) = Just (g [])
@@ -1103,7 +1103,7 @@ isReflMkCos :: Mk [Coercion] -> Bool
 isReflMkCos = maybe False (all isReflCo) . unreturnMk_maybe
 
 mkEqVarCo :: EqVar -> Mk Coercion
-mkEqVarCo eqv = Mk [eqv] (\[cv] -> mkCoVarCo cv)
+mkEqVarCo eqv = Mk [eqv] (\cvs -> case cvs of { [cv] -> mkCoVarCo cv; _ -> panic "mkEqVarCo" })
 
 mkEqVarsCos :: [EqVar] -> Mk [Coercion]
 mkEqVarsCos eqvs = Mk eqvs (map mkCoVarCo)

@@ -69,10 +69,7 @@ module TcType (
   ---------------------------------
   -- Predicate types  
   mkMinimalBySCs, transSuperClasses, immSuperClasses,
-  getClassPredTys, getClassPredTys_maybe,
-  getEqPredTys, getEqPredTys_maybe,
-  getIPPredTy_maybe,
-
+  
   -- * Finding type instances
   tcTyFamInsts,
 
@@ -109,7 +106,7 @@ module TcType (
   -- Rexported from Kind
   Kind, typeKind,
   unliftedTypeKind, liftedTypeKind, argTypeKind,
-  openTypeKind, mkArrowKind, mkArrowKinds, 
+  openTypeKind, factKind, mkArrowKind, mkArrowKinds, 
   isLiftedTypeKind, isUnliftedTypeKind, isSubOpenTypeKind, 
   isSubArgTypeKind, isSubKind, splitKindFunTys, defaultKind,
   kindVarRef, mkKindVar,  
@@ -171,6 +168,7 @@ import NameSet
 import VarEnv
 import PrelNames
 import TysWiredIn
+import TysPrim ( factKind )
 import BasicTypes
 import Util
 import Maybes
@@ -1000,31 +998,6 @@ isTyVarClassPred :: PredType -> Bool
 isTyVarClassPred ty = case getClassPredTys_maybe ty of
     Just (_, tys) -> all isTyVarTy tys
     _             -> False
-
-getClassPredTys :: PredType -> (Class, [Type])
-getClassPredTys ty = case getClassPredTys_maybe ty of
-        Just (clas, tys) -> (clas, tys)
-        Nothing          -> pprPanic "getClassPredTys" (ppr ty)
-
-getClassPredTys_maybe :: PredType -> Maybe (Class, [Type])
-getClassPredTys_maybe ty = case tcSplitTyConApp_maybe ty of 
-        Just (tc, tys) | Just clas <- tyConClass_maybe tc -> Just (clas, tys)
-        _ -> Nothing
-
-getEqPredTys :: PredType -> (Type, Type)
-getEqPredTys ty = case getEqPredTys_maybe ty of
-        Just (ty1, ty2) -> (ty1, ty2)
-        Nothing         -> pprPanic "getEqPredTys" (ppr ty)
-
-getEqPredTys_maybe :: PredType -> Maybe (Type, Type)
-getEqPredTys_maybe ty = case tcSplitTyConApp_maybe ty of 
-        Just (tc, [ty1, ty2]) | tc `hasKey` eqTyConKey -> Just (ty1, ty2)
-        _ -> Nothing
-
-getIPPredTy_maybe :: PredType -> Maybe Type
-getIPPredTy_maybe ty = case tcSplitTyConApp_maybe ty of 
-        Just (tc, [ty1]) | Just _ <- tyConIP_maybe tc -> Just ty1
-        _ -> Nothing
 
 evVarPred_maybe :: EvVar -> Maybe PredType
 evVarPred_maybe v = if isPredTy ty then Just ty else Nothing

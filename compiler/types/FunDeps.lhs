@@ -22,7 +22,6 @@ import Name
 import Var
 import Class
 import Type
-import TcType
 import Unify
 import InstEnv
 import VarSet

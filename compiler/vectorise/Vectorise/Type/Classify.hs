@@ -11,7 +11,6 @@ import TyCon
 import TypeRep
 import Type
 import Digraph
-import Outputable
 
 type TyConGroup = ([TyCon], UniqSet TyCon)
 

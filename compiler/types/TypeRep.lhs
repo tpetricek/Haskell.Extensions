@@ -570,7 +570,7 @@ pprTcApp _ pp tc [ty]
   | tc `hasKey` openTypeKindTyConKey     = ptext (sLit "(?)")
   | tc `hasKey` ubxTupleKindTyConKey     = ptext (sLit "(#)")
   | tc `hasKey` argTypeKindTyConKey      = ptext (sLit "??")
-  | Just n <- tyConIP_maybe tc           = ppr tc <+> ptext (sLit "::") <+> pp TopPrec ty
+  | Just _ <- tyConIP_maybe tc           = ppr tc <+> ptext (sLit "::") <+> pp TopPrec ty
 
 pprTcApp p pp tc tys
   | isTupleTyCon tc && tyConArity tc == length tys

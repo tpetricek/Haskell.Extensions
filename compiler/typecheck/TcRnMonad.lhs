@@ -19,6 +19,7 @@ import HscTypes
 import Module
 import RdrName
 import Name
+import Type
 import TcType
 import InstEnv
 import FamInstEnv
@@ -372,16 +373,21 @@ newSysLocalIds fs tys
   = do	{ us <- newUniqueSupply
 	; return (zipWith (mkSysLocal fs) (uniqsFromSupply us) tys) }
 
-newCoVar :: TcType -> TcType -> TcM EvVar
+newCoVar :: TcType -> TcType -> TcRnIf gbl lcl EvVar
 newCoVar ty1 ty2
-  = do { name <- newName (mkVarOccFS (fsLit "co"))
-       ; return (mkLocalId name (mkCoercionType ty1 ty2)) }
+  = do { uniq <- newUnique
+       ; return (mkLocalId (mkInternalName uniq (mkVarOccFS (fsLit "co")) noSrcSpan) (mkCoercionType ty1 ty2)) }
 
 newName :: OccName -> TcM Name
 newName occ
   = do { uniq <- newUnique
        ; loc  <- getSrcSpanM
        ; return (mkInternalName uniq occ loc) }
+
+finaliseMk :: Mk a -> TcRnIf gbl lcl ([(EqVar, CoVar)], a)
+finaliseMk (Mk eqvs build) = do
+    covs <- mapM (uncurry newCoVar . getEqPredTys . evVarPred) eqvs
+    return (eqvs `zip` covs, build covs)
 
 instance MonadUnique (IOEnv (Env gbl lcl)) where
         getUniqueM = newUnique
@@ -926,11 +932,6 @@ mkErrInfo env ctxts
 	  ; return (msg $$ rest) }
      | otherwise
      = go n env ctxts
-
-finaliseMk :: Mk a -> TcM ([(EqVar, CoVar)], a)
-finaliseMk (Mk eqvs build) = do
-    covs <- mapM (uncurry newCoVar . getEqPredTys . evVarPred) eqvs
-    return (eqvs `zip` covs, build covs)
 
 mAX_CONTEXTS :: Int	-- No more than this number of non-landmark contexts
 mAX_CONTEXTS = 3

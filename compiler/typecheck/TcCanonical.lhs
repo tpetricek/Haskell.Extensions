@@ -1017,7 +1017,7 @@ now!).
 rewriteWithFunDeps :: [Equation]
                    -> [Xi] 
                    -> WantedLoc 
-                   -> TcS (Maybe ([Xi], [Coercion], [(EvVar,WantedLoc)])) 
+                   -> TcS (Maybe ([Xi], Mk [Coercion], [(EvVar,WantedLoc)])) 
                                            -- Not quite a WantedEvVar unfortunately
                                            -- Because our intention could be to make 
                                            -- it derived at the end of the day
@@ -1025,11 +1025,11 @@ rewriteWithFunDeps :: [Equation]
 -- Post: returns no trivial equalities (identities)
 rewriteWithFunDeps eqn_pred_locs xis wloc
  = do { fd_ev_poss <- mapM (instFunDepEqn wloc) eqn_pred_locs
-      ; let fd_ev_pos :: [(Int,(EvVar,WantedLoc))]
+      ; let fd_ev_pos :: [(Int,(EqVar,WantedLoc))]
             fd_ev_pos = concat fd_ev_poss
             (rewritten_xis, cos) = unzip (rewriteDictParams fd_ev_pos xis)
       ; if null fd_ev_pos then return Nothing
-        else return (Just (rewritten_xis, cos, map snd fd_ev_pos)) }
+        else return (Just (rewritten_xis, joinMks cos, map snd fd_ev_pos)) }
 
 instFunDepEqn :: WantedLoc -> Equation -> TcS [(Int,(EvVar,WantedLoc))]
 -- Post: Returns the position index as well as the corresponding FunDep equality
@@ -1063,16 +1063,16 @@ mkEqnMsg (pred1,from1) (pred2,from2) tidy_env
 			  nest 2 (sep [ppr tpred2 <> comma, nest 2 from2])]
 	; return (tidy_env, msg) }
 
-rewriteDictParams :: [(Int,(EvVar,WantedLoc))] -- A set of coercions : (pos, ty' ~ ty)
+rewriteDictParams :: [(Int,(EqVar,WantedLoc))] -- A set of coercions : (pos, ty' ~ ty)
                   -> [Type]                    -- A sequence of types: tys
-                  -> [(Type,Coercion)]         -- Returns: [(ty', co : ty' ~ ty)]
+                  -> [(Type,Mk Coercion)]      -- Returns: [(ty', co : ty' ~ ty)]
 rewriteDictParams param_eqs tys
   = zipWith do_one tys [0..]
   where
-    do_one :: Type -> Int -> (Type,Coercion)
+    do_one :: Type -> Int -> (Type,Mk Coercion)
     do_one ty n = case lookup n param_eqs of
-                    Just wev -> (get_fst_ty wev, mkCoVarCo (fst wev))
-                    Nothing  -> (ty,             mkReflCo ty)	-- Identity
+                    Just wev -> (get_fst_ty wev, mkEqVarCo (fst wev))
+                    Nothing  -> (ty,             returnMk (mkReflCo ty))	-- Identity
 
     get_fst_ty (wev,_wloc) 
       | Just (ty1, _) <- getEqPredTys_maybe (evVarPred wev )

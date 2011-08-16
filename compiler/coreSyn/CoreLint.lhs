@@ -281,10 +281,24 @@ lintCoreExpr (Let (Rec pairs) body)
     bndrs = map fst pairs
     (_, dups) = removeDups compare bndrs
 
-lintCoreExpr e@(App fun arg)
-  = do	{ fun_ty <- lintCoreExpr fun
-	; addLoc (AnExpr e) $
-          lintCoreArg fun_ty arg }
+lintCoreExpr e@(App _ _)
+    | Var x <- fun -- Greivous hack for EqBox construction: EqBox may have type arguments
+                   -- of kind (* -> *) but its type insists on *. When we have polymorphic kinds,
+                   -- we should do this properly
+    , Just dc <- isDataConWorkId_maybe x
+    , dc == eqBoxDataCon
+    , [Type arg_ty1, Type arg_ty2, co_e] <- args
+    = do arg_kind1 <- lintType arg_ty1
+         arg_kind2 <- lintType arg_ty2
+         unless (arg_kind1 `eqKind` arg_kind2)
+                (addErrL (mkEqBoxKindErrMsg arg_ty1 arg_ty2))
+         
+         lintCoreArg (mkCoercionType arg_ty1 arg_ty2 `mkFunTy` mkEqPred (arg_ty1, arg_ty2)) co_e
+    | otherwise
+    = do { fun_ty <- lintCoreExpr fun
+         ; addLoc (AnExpr e) $ foldM lintCoreArg fun_ty args }
+  where
+    (fun, args) = collectArgs e
 
 lintCoreExpr (Lam var expr)
   = addLoc (LambdaBodyOf var) $
@@ -646,6 +660,10 @@ lintCoercion (ForAllCo v co)
        ; return (ForAllTy v s, ForAllTy v t) }
 
 lintCoercion (CoVarCo cv)
+  | not (isCoVar cv)
+  = failWithL (hang (ptext (sLit "Bad CoVarCo:") <+> ppr cv)
+                  2 (ptext (sLit "With offending type:") <+> ppr (varType cv)))
+  | otherwise
   = do { checkTyCoVarInScope cv
        ; return (coVarKind cv) }
 
@@ -1128,6 +1146,14 @@ mkStrictMsg binder
 	      hsep [ptext (sLit "Binder's demand info:"), ppr (idDemandInfo binder)]
 	     ]
 
+
+mkEqBoxKindErrMsg :: Type -> Type -> Message
+mkEqBoxKindErrMsg ty1 ty2
+  = vcat [ptext (sLit "Kinds don't match in type arguments of EqBox:"),
+          hang (ptext (sLit "Arg type 1:"))   
+                 4 (ppr ty1 <+> dcolon <+> ppr (typeKind ty1)),
+          hang (ptext (sLit "Arg type 2:"))   
+                 4 (ppr ty2 <+> dcolon <+> ppr (typeKind ty2))]
 
 mkKindErrMsg :: TyVar -> Type -> Message
 mkKindErrMsg tyvar arg_ty

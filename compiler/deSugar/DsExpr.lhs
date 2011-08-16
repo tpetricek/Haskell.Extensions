@@ -550,21 +550,22 @@ dsExpr expr@(RecordUpd record_expr (HsRecFields { rec_flds = fields })
 
 			-- Tediously wrap the application in a cast
 			-- Note [Update for GADTs]
-		 wrapped_rhs | null eq_spec = rhs
-			     | otherwise    = mkLHsWrap (WpCast ([], wrap_co)) rhs
-		 wrap_co = mkTyConAppCo tycon [ lookup tv ty
-					      | (tv,ty) <- univ_tvs `zip` out_inst_tys]
+		 mk_wrap_co = fmapMk (mkTyConAppCo tycon) $
+                                joinMks [ lookup tv ty | (tv,ty) <- univ_tvs `zip` out_inst_tys ]
 		 lookup univ_tv ty = case lookupVarEnv wrap_subst univ_tv of
-					Just co' -> co'
-					Nothing  -> mkReflCo ty
-		 wrap_subst = mkVarEnv [ (tv, mkSymCo (mkCoVarCo co_var))
-				       | ((tv,_),co_var) <- eq_spec `zip` eqs_vars ]
+					Just mk_co' -> mk_co'
+					Nothing     -> returnMk (mkReflCo ty)
+		 wrap_subst = mkVarEnv [ (tv, fmapMk mkSymCo (mkEqVarCo eq_var))
+				       | ((tv,_),eq_var) <- eq_spec `zip` eqs_vars ]
 
     	         pat = noLoc $ ConPatOut { pat_con = noLoc con, pat_tvs = ex_tvs
 					 , pat_dicts = eqs_vars ++ theta_vars
 					 , pat_binds = emptyTcEvBinds
 					 , pat_args = PrefixCon $ map nlVarPat arg_ids
 					 , pat_ty = in_ty }
+           ; made_wrap_co <- finaliseMk mk_wrap_co
+           ; let wrapped_rhs | null eq_spec = rhs
+                             | otherwise    = mkLHsWrap (WpCast made_wrap_co) rhs
 	   ; return (mkSimpleMatch [pat] wrapped_rhs) }
 
 \end{code}

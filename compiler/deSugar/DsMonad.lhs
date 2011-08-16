@@ -14,6 +14,7 @@ module DsMonad (
 
         newLocalName,
         duplicateLocalDs, newSysLocalDs, newSysLocalsDs, newUniqueId,
+        finaliseMk,
         newFailLocalDs, newPredVarDs,
         getSrcSpanDs, putSrcSpanDs,
         getModuleDs,

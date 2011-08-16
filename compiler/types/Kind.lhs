@@ -179,6 +179,7 @@ isSubKindCon kc1 kc2
   | isLiftedTypeKindCon kc1   && isLiftedTypeKindCon kc2   = True
   | isUnliftedTypeKindCon kc1 && isUnliftedTypeKindCon kc2 = True
   | isUbxTupleKindCon kc1     && isUbxTupleKindCon kc2     = True
+  | isFactKindCon kc1         && isFactKindCon kc2         = True
   | isOpenTypeKindCon kc2                                  = True 
                            -- we already know kc1 is not a fun, its a TyCon
   | isArgTypeKindCon kc2      && isSubArgTypeKindCon kc1   = True

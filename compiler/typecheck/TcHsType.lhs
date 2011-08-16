@@ -165,7 +165,7 @@ tcHsInstHead (L loc hs_ty)
   where
     kc_inst_head ty@(HsPredTy pred@(HsClassP {}))
       = do { (pred', kind) <- kc_pred pred
-           ; checkExpectedKind ty kind ekLifted
+           ; checkExpectedKind ty kind ekFact
            ; return (HsPredTy pred') }
     kc_inst_head (HsForAllTy exp tv_names context (L loc ty))
       = kcHsTyVars tv_names         $ \ tv_names' ->
@@ -479,9 +479,9 @@ kcHsLPred :: LHsPred Name -> TcM (LHsPred Name)
 kcHsLPred = wrapLocM kcHsPred
 
 kcHsPred :: HsPred Name -> TcM (HsPred Name)
-kcHsPred pred = do      -- Checks that the result is a type kind
+kcHsPred pred = do      -- Checks that the result is of kind Fact
     (pred', kind) <- kc_pred pred
-    checkExpectedKind pred kind ekOpen
+    checkExpectedKind pred kind ekFact
     return pred'
     
 ---------------------------
@@ -490,7 +490,8 @@ kc_pred :: HsPred Name -> TcM (HsPred Name, TcKind)
 	-- application (reason: used from TcDeriv)
 kc_pred (HsIParam name ty)
   = do { (ty', kind) <- kc_lhs_type ty
-       ; return (HsIParam name ty', kind) }
+       ; checkExpectedKind ty kind (EK argTypeKind EkIParam)
+       ; return (HsIParam name ty', factKind) }
 kc_pred (HsClassP cls tys)
   = do { kind <- kcClass cls
        ; (tys', res_kind) <- kcApps cls kind tys
@@ -499,7 +500,7 @@ kc_pred (HsEqualP ty1 ty2)
   = do { (ty1', kind1) <- kc_lhs_type ty1
        ; (ty2', kind2) <- kc_lhs_type ty2
        ; checkExpectedKind ty2 kind2 (EK kind1 EkEqPred)
-       ; return (HsEqualP ty1' ty2', unliftedTypeKind) }
+       ; return (HsEqualP ty1' ty2', factKind) }
 
 ---------------------------
 kcTyVar :: Name -> TcM TcKind
@@ -916,11 +917,13 @@ data EkCtxt  = EkUnk		-- Unknown context
       	     | EkEqPred		-- Second argument of an equality predicate
       	     | EkKindSig	-- Kind signature
      	     | EkArg SDoc Int   -- Function, arg posn, expected kind
+             | EkIParam         -- Implicit parameter type
 
 
-ekLifted, ekOpen :: ExpKind
+ekLifted, ekOpen, ekFact :: ExpKind
 ekLifted = EK liftedTypeKind EkUnk
 ekOpen   = EK openTypeKind   EkUnk
+ekFact   = EK factKind       EkUnk
 
 checkExpectedKind :: Outputable a => a -> TcKind -> ExpKind -> TcM ()
 -- A fancy wrapper for 'unifyKind', which tries
@@ -976,6 +979,7 @@ checkExpectedKind ty act_kind (EK exp_kind ek_ctxt)
                expected_herald EkUnk     = ptext (sLit "Expected")
                expected_herald EkKindSig = ptext (sLit "An enclosing kind signature specified")
                expected_herald EkEqPred  = ptext (sLit "The left argument of the equality predicate had")
+               expected_herald EkIParam  = ptext (sLit "The type argument of the implicit parameter had")
                expected_herald (EkArg fun arg_no)
 	         = ptext (sLit "The") <+> speakNth arg_no <+> ptext (sLit "argument of")
 		   <+> quotes fun <+> ptext (sLit ("should have"))

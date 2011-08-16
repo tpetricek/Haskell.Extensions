@@ -53,6 +53,9 @@ module Type (
 
         -- Deconstructing predicate types
         PredTree(..), predTreePredType, predTypePredTree,
+        getClassPredTys, getClassPredTys_maybe,
+        getEqPredTys, getEqPredTys_maybe,
+        getIPPredTy_maybe,
 
 	-- ** Common type constructors
         funTyCon,
@@ -891,6 +894,33 @@ predTypePredTree ev_ty = case splitTyConApp_maybe ev_ty of
     _ -> IrredPred ev_ty
 \end{code}
 
+\begin{code}
+getClassPredTys :: PredType -> (Class, [Type])
+getClassPredTys ty = case getClassPredTys_maybe ty of
+        Just (clas, tys) -> (clas, tys)
+        Nothing          -> pprPanic "getClassPredTys" (ppr ty)
+
+getClassPredTys_maybe :: PredType -> Maybe (Class, [Type])
+getClassPredTys_maybe ty = case splitTyConApp_maybe ty of 
+        Just (tc, tys) | Just clas <- tyConClass_maybe tc -> Just (clas, tys)
+        _ -> Nothing
+
+getEqPredTys :: PredType -> (Type, Type)
+getEqPredTys ty = case getEqPredTys_maybe ty of
+        Just (ty1, ty2) -> (ty1, ty2)
+        Nothing         -> pprPanic "getEqPredTys" (ppr ty)
+
+getEqPredTys_maybe :: PredType -> Maybe (Type, Type)
+getEqPredTys_maybe ty = case splitTyConApp_maybe ty of 
+        Just (tc, [ty1, ty2]) | tc `hasKey` eqTyConKey -> Just (ty1, ty2)
+        _ -> Nothing
+
+getIPPredTy_maybe :: PredType -> Maybe Type
+getIPPredTy_maybe ty = case splitTyConApp_maybe ty of 
+        Just (tc, [ty1]) | Just _ <- tyConIP_maybe tc -> Just ty1
+        _ -> Nothing
+\end{code}
+
 %************************************************************************
 %*									*
                    Size									
@@ -1454,7 +1484,7 @@ theBy eq (x:xs) = go x xs
 
 typeKind :: Type -> Kind
 typeKind ty@(TyConApp tc tys) 
-  | isTupleTyCon tc
+  | isBoxedTupleTyCon tc
   , tyConArity tc == length tys
   = case theBy eqKind (map typeKind tys) of
       Just k  -> k
