@@ -2,11 +2,14 @@
 module TysWiredIn where
 
 import {-# SOURCE #-} DataCon    (DataCon)
-import 		      TyCon      (TyCon)
+import {-# SOURCE #-} TyCon      (TyCon)
 import  	      Name 	 (Name)
 import 		      BasicTypes (IPName)
+import {-# SOURCE #-} TypeRep    (Type)
 
 
 eqTyCon :: TyCon
 ipDataCon :: IPName Name -> DataCon
+ipTyCon :: IPName Name -> TyCon
+mkBoxedTupleTy :: [Type] -> Type
 \end{code}

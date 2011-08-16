@@ -13,6 +13,12 @@ module MkCore (
         mkIntegerExpr,
         mkFloatExpr, mkDoubleExpr,
         mkCharExpr, mkStringExpr, mkStringExprFS,
+
+        -- * Constructing/deconstructing implicit parameter boxes
+        mkIPUnbox, mkIPBox,
+
+        -- * Constructing/deconstructing equality evidence boxes
+        mkEqBox,
         
         -- * Constructing general big tuples
         -- $big_tuples
@@ -45,7 +51,7 @@ module MkCore (
 #include "HsVersions.h"
 
 import Id
-import Var      ( EvVar, setTyVarUnique )
+import Var      ( EvVar, setTyVarUnique, varName )
 
 import CoreSyn
 import CoreUtils        ( exprType, needsCaseBinding, bindNonRec )
@@ -55,19 +61,20 @@ import HscTypes
 import TysWiredIn
 import PrelNames
 
-import TcType		( mkSigmaTy )
+import TcType		( mkSigmaTy, getIPPredTy_maybe )
 import Type
 import Coercion
 import TysPrim
 import DataCon          ( DataCon, dataConWorkId )
 import IdInfo		( vanillaIdInfo, setStrictnessInfo, setArityInfo )
 import Demand
-import Name
+import Name      hiding ( varName )
 import Outputable
 import FastString
 import UniqSupply
 import BasicTypes
 import Util             ( notNull, zipEqual )
+import Pair
 import Constants
 
 import Data.Char        ( ord )
@@ -284,6 +291,31 @@ mkStringExprFS str
   where
     chars = unpackFS str
     safeChar c = ord c >= 1 && ord c <= 0x7F
+\end{code}
+
+\begin{code}
+
+mkIPBox :: IPName Id -> CoreExpr -> CoreExpr
+mkIPBox ipx e = Var (dataConWorkId (ipDataCon n)) `mkTyApps` [exprType e] `App` e
+  where n = fmap varName ipx
+
+mkIPUnbox :: IPName Id -> CoreExpr
+mkIPUnbox ipx = Case (Var x) (mkWildValBinder (idType x)) (idType y)
+                     [(DataAlt (ipDataCon n), [y], Var y)]
+  where n = fmap varName ipx
+        x = ipNameName ipx
+        y = x `setIdType` case getIPPredTy_maybe (idType x) of
+                Just ty -> ty
+                Nothing -> pprPanic "mkIPUnbox" (ppr (idType x))
+
+\end{code}
+
+\begin{code}
+
+mkEqBox :: Coercion -> CoreExpr
+mkEqBox co = Var (dataConWorkId eqBoxDataCon) `mkTyApps` [ty1, ty2] `App` Coercion co
+  where Pair ty1 ty2 = coercionKind co
+
 \end{code}
 
 %************************************************************************

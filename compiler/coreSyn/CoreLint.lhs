@@ -20,6 +20,7 @@ import Bag
 import Literal
 import DataCon
 import TysWiredIn
+import TysPrim
 import Var
 import VarEnv
 import VarSet
@@ -27,13 +28,12 @@ import Name
 import Id
 import PprCore
 import ErrUtils
+import Coercion
 import SrcLoc
 import Kind
 import Type
 import TypeRep
-import Coercion
 import TyCon
-import Class
 import BasicTypes
 import StaticFlags
 import ListSetOps
@@ -339,7 +339,7 @@ lintCoreExpr (Type ty)
 lintCoreExpr (Coercion co)
   = do { co' <- lintInCo co
        ; let Pair ty1 ty2 = coercionKind co'
-       ; return (mkTyConApp eqPrimTyCon [ty1, ty2] }
+       ; return (mkCoercionType ty1 ty2) }
 \end{code}
 
 %************************************************************************
@@ -718,7 +718,7 @@ lintType ty@(FunTy t1 t2)
 lintType ty@(TyConApp tc tys)
   | tc `hasKey` eqPrimTyConKey	-- See Note [The Eq# TyCon] in TysPrim
   = lint_prim_eq_pred ty tys
-  | tc `hasKey` eqPredTyConKey
+  | tc `hasKey` eqTyConKey
   = lint_eq_pred ty tys
   | tyConHasKind tc
   = lint_ty_app ty (tyConKind tc) tys

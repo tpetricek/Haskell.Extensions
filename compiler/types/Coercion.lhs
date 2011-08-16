@@ -24,8 +24,9 @@ module Coercion (
         isSubArgTypeKind, isSubOpenTypeKind, isSubKind, defaultKind, eqKind,
         isSubKindCon,
 
-        mkCoType, coVarKind, coVarKind_maybe,
+        coVarKind, coVarKind_maybe,
         coercionType, coercionKind, coercionKinds, isReflCo,
+        mkCoercionType,
 
 	-- ** Constructing coercions
         mkReflCo, mkCoVarCo,
@@ -72,8 +73,11 @@ module Coercion (
         pprCo, pprParendCo, pprCoAxiom,
 
         -- * Other
-        applyCo, coVarPred
-        
+        applyCo,
+
+        -- * Utilities for building Coercions with "free EqVars"
+        Mk(..), returnMk, fmapMk, joinMk, joinMks,
+        isReflMkCo, isReflMkCos, mkEqVarCo, mkEqVarsCos
        ) where 
 
 #include "HsVersions.h"
@@ -83,7 +87,6 @@ import TypeRep
 import qualified Type
 import Type hiding( substTy, substTyVarBndr, extendTvSubst )
 import Kind
-import Class	( classTyCon )
 import TyCon
 import Var
 import VarEnv
@@ -96,7 +99,6 @@ import BasicTypes
 import Outputable
 import Unique
 import Pair
-import TysPrim		( eqPrimTyCon )
 import PrelNames	( funTyConKey, eqPrimTyConKey )
 import Control.Applicative
 import Data.Traversable (traverse, sequenceA)
@@ -277,7 +279,6 @@ isCoVar :: Var -> Bool
 isCoVar v = isCoVarType (varType v)
 
 isCoVarType :: Type -> Bool
--- Don't rely on a PredTy; look at the representation type
 isCoVarType ty 
   | Just tc <- tyConAppTyCon_maybe ty = tc `hasKey` eqPrimTyConKey
   | otherwise                         = False
@@ -457,11 +458,6 @@ splitForAllCo_maybe _                = Nothing
 -------------------------------------------------------
 -- and some coercion kind stuff
 
-coVarPred :: CoVar -> PredType
-coVarPred cv = case coVarKind_maybe cv of
-  Just (ty1, ty2) -> mkEqPred (ty1, ty2)
-  Nothing         -> pprPanic "coVarPred" (ppr cv $$ ppr (varType cv))
-
 coVarKind :: CoVar -> (Type,Type) 
 -- c :: t1 ~ t2
 coVarKind cv = case coVarKind_maybe cv of
@@ -475,8 +471,8 @@ coVarKind_maybe cv = case splitTyConApp_maybe (varType cv) of
 
 -- | Makes a coercion type from two types: the types whose equality 
 -- is proven by the relevant 'Coercion'
-mkPrimCoType :: Type -> Type -> Type
-mkPrimCoType = curry mkPrimEqType
+mkCoercionType :: Type -> Type -> Type
+mkCoercionType = curry mkPrimEqType
 
 isReflCo :: Coercion -> Bool
 isReflCo (Refl {}) = True
@@ -1026,7 +1022,7 @@ seqCos (co:cos) = seqCo co `seq` seqCos cos
 \begin{code}
 coercionType :: Coercion -> Type
 coercionType co = case coercionKind co of
-                    Pair ty1 ty2 -> mkCoType ty1 ty2
+                    Pair ty1 ty2 -> mkCoercionType ty1 ty2
 
 ------------------
 -- | If it is the case that
@@ -1067,4 +1063,48 @@ applyCo :: Type -> Coercion -> Type
 applyCo ty co | Just ty' <- coreView ty = applyCo ty' co
 applyCo (FunTy _ ty) _ = ty
 applyCo _            _ = panic "applyCo"
+\end{code}
+
+\begin{code}
+data Mk a = Mk [EqVar] ([CoVar] -> a)
+
+instance Functor Mk where
+    fmap = fmapMk
+
+instance Applicative Mk where
+    pure = returnMk
+    mkf <*> mkx = joinMk ($) mkf mkx
+
+instance Outputable a => Outputable (Mk a) where
+    ppr (Mk xs f) = ppr (f xs)
+     -- Cheat and pretend that EqVars are CoVars for pretty-printing
+
+returnMk :: a -> Mk a
+returnMk x = Mk [] (\[] -> x)
+
+unreturnMk_maybe :: Mk a -> Maybe a
+unreturnMk_maybe (Mk [] g) = Just (g [])
+unreturnMk_maybe _         = Nothing
+
+fmapMk :: (a -> b) -> Mk a -> Mk b
+fmapMk f (Mk eqs g) = Mk eqs (f . g)
+
+joinMk :: (a -> b -> c) -> Mk a -> Mk b -> Mk c
+joinMk join (Mk eqvs1 mk_cos1) (Mk eqvs2 mk_cos2)
+  = Mk (eqvs1 ++ eqvs2) (\cvs -> case splitAtList eqvs1 cvs of (cvs1, cvs2) -> mk_cos1 cvs1 `join` mk_cos2 cvs2)
+
+joinMks :: [Mk a] -> Mk [a]
+joinMks = foldr (joinMk (:)) (returnMk [])
+
+isReflMkCo :: Mk Coercion -> Bool
+isReflMkCo = maybe False isReflCo . unreturnMk_maybe
+
+isReflMkCos :: Mk [Coercion] -> Bool
+isReflMkCos = maybe False (all isReflCo) . unreturnMk_maybe
+
+mkEqVarCo :: EqVar -> Mk Coercion
+mkEqVarCo eqv = Mk [eqv] (\[cv] -> mkCoVarCo cv)
+
+mkEqVarsCos :: [EqVar] -> Mk [Coercion]
+mkEqVarsCos eqvs = Mk eqvs (map mkCoVarCo)
 \end{code}

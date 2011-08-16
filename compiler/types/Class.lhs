@@ -55,8 +55,8 @@ data Class
 	classFunDeps :: [FunDep TyVar],	-- The functional dependencies
 
 	-- Superclasses: eg: (F a ~ b, F b ~ G a, Eq a, Show b)
-        -- We need value-level selectors for the dictionary 
-	-- superclasses, but not for the equality superclasses
+        -- We need value-level selectors for both the dictionary 
+	-- superclasses and the equality superclasses
 	classSCTheta :: [PredType],	-- Immediate superclasses, 
 	classSCSels  :: [Id],		-- Selector functions to extract the
 		     			--   superclasses from a 

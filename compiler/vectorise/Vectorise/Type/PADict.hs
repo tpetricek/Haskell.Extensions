@@ -14,7 +14,6 @@ import CoreUtils
 import CoreUnfold
 import TyCon
 import Type
-import TypeRep
 import Id
 import Var
 import Name

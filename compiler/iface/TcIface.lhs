@@ -803,7 +803,7 @@ tcIfaceTypes tys = mapM tcIfaceType tys
 
 -----------------------------------------
 tcIfaceCtxt :: IfaceContext -> IfL ThetaType
-tcIfaceCtxt sts = mapM (tcIfacePred tcIfaceType) sts
+tcIfaceCtxt sts = mapM tcIfaceType sts
 \end{code}
 
 %************************************************************************
@@ -1237,10 +1237,6 @@ tcIfaceTyCon IfaceUbxTupleKindTc     = return ubxTupleKindTyCon
 tcWiredInTyCon :: TyCon -> IfL TyCon
 tcWiredInTyCon tc = do { ifCheckWiredInThing (ATyCon tc)
 		       ; return tc }
-
-tcIfaceClass :: Name -> IfL Class
-tcIfaceClass name = do { thing <- tcIfaceGlobal name
-		       ; return (tyThingClass thing) }
 
 tcIfaceCoAxiom :: Name -> IfL CoAxiom
 tcIfaceCoAxiom name = do { thing <- tcIfaceGlobal name

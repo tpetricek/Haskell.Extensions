@@ -838,7 +838,7 @@ mkDictFunId dfun_name tvs theta clas tys
 
 mkDictFunTy :: [TyVar] -> ThetaType -> Class -> [Type] -> Type
 mkDictFunTy tvs theta clas tys
-  = mkSigmaTy tvs theta (mkDictTy clas tys)
+  = mkSigmaTy tvs theta (mkClassPred clas tys)
 \end{code}
 
 

@@ -172,6 +172,9 @@ newtype IPName name = IPName name	-- ?x
   -- Ord is used in the IP name cache finite map
   -- (used in HscTypes.OrigIParamCache)
 
+instance Functor IPName where
+    fmap = mapIPName
+
 ipNameName :: IPName name -> name
 ipNameName (IPName n) = n
 

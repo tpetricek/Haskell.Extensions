@@ -174,7 +174,7 @@ instance Outputable InertSet where
 emptyInert :: InertSet
 emptyInert = IS { inert_eqs    = Bag.emptyBag
                 , inert_frozen = Bag.emptyBag
-                , inert_irred  = Bag.emptyBag
+                , inert_irreds = Bag.emptyBag
                 , inert_dicts  = emptyCCanMap
                 , inert_ips    = emptyCCanMap
                 , inert_funeqs = emptyCCanMap }
@@ -189,7 +189,7 @@ updInertSet is item
   | Just x  <- isCIPCan_Maybe item      -- IP 
   = is { inert_ips   = updCCanMap (x,item) (inert_ips is) }  
   | isCIrredEvCan item                     -- Presently-irreducible evidence
-  = is { inert_irred = inert_irred is `Bag.snocBag` item }
+  = is { inert_irreds = inert_irreds is `Bag.snocBag` item }
   | Just tc <- isCFunEqCan_Maybe item   -- Function equality 
   = is { inert_funeqs = updCCanMap (tc,item) (inert_funeqs is) }
   | otherwise 
@@ -411,7 +411,7 @@ tryPreSolveAndInteract sctx dyn_flags ct (all_previous_discharged, inert)
     get_inert_cts (EqPred {})
       = inert_eqs inert `unionBags` cCanMapToBag (inert_funeqs inert)
     get_inert_cts (TuplePred ts)
-      = unionBags $ map get_inert_cts ts
+      = andCCans $ map get_inert_cts ts
     get_inert_cts (IrredPred {})
       = inert_irreds inert
 
@@ -429,7 +429,7 @@ dischargeFromCCans cans ev fl
     discharge_ct ct _rest
       | evVarPred (cc_id ct) `eqPred` the_pred
       , cc_flavor ct `canSolve` fl
-      = do { when (isWanted fl) $ setEvBind ev (evVarTerm (cc_id ct))
+      = do { when (isWanted fl) $ setEvBind ev (EvId (cc_id ct))
            	 -- Deriveds need no evidence
     	         -- For Givens, we already have evidence, and we don't need it twice 
            ; return True }
@@ -586,20 +586,20 @@ data SPSolveResult = SPCantSolve | SPSolved WorkItem | SPError
 -- touchable unification variable.
 --     	    See Note [Touchables and givens] 
 trySpontaneousSolve :: WorkItem -> TcS SPSolveResult
-trySpontaneousSolve workItem@(CTyEqCan { cc_id = cv, cc_flavor = gw, cc_tyvar = tv1, cc_rhs = xi })
+trySpontaneousSolve workItem@(CTyEqCan { cc_id = eqv, cc_flavor = gw, cc_tyvar = tv1, cc_rhs = xi })
   | isGivenOrSolved gw
   = return SPCantSolve
   | Just tv2 <- tcGetTyVar_maybe xi
   = do { tch1 <- isTouchableMetaTyVar tv1
        ; tch2 <- isTouchableMetaTyVar tv2
        ; case (tch1, tch2) of
-           (True,  True)  -> trySpontaneousEqTwoWay cv gw tv1 tv2
-           (True,  False) -> trySpontaneousEqOneWay cv gw tv1 xi
-           (False, True)  -> trySpontaneousEqOneWay cv gw tv2 (mkTyVarTy tv1)
+           (True,  True)  -> trySpontaneousEqTwoWay eqv gw tv1 tv2
+           (True,  False) -> trySpontaneousEqOneWay eqv gw tv1 xi
+           (False, True)  -> trySpontaneousEqOneWay eqv gw tv2 (mkTyVarTy tv1)
 	   _ -> return SPCantSolve }
   | otherwise
   = do { tch1 <- isTouchableMetaTyVar tv1
-       ; if tch1 then trySpontaneousEqOneWay cv gw tv1 xi
+       ; if tch1 then trySpontaneousEqOneWay eqv gw tv1 xi
                  else do { traceTcS "Untouchable LHS, can't spontaneously solve workitem:" 
                                     (ppr workItem) 
                          ; return SPCantSolve }
@@ -611,14 +611,14 @@ trySpontaneousSolve workItem@(CTyEqCan { cc_id = cv, cc_flavor = gw, cc_tyvar = 
 trySpontaneousSolve _ = return SPCantSolve
 
 ----------------
-trySpontaneousEqOneWay :: CoVar -> CtFlavor -> TcTyVar -> Xi -> TcS SPSolveResult
+trySpontaneousEqOneWay :: EqVar -> CtFlavor -> TcTyVar -> Xi -> TcS SPSolveResult
 -- tv is a MetaTyVar, not untouchable
-trySpontaneousEqOneWay cv gw tv xi	
+trySpontaneousEqOneWay eqv gw tv xi	
   | not (isSigTyVar tv) || isTyVarTy xi 
   = do { let kxi = typeKind xi -- NB: 'xi' is fully rewritten according to the inerts 
                                -- so we have its more specific kind in our hands
        ; if kxi `isSubKind` tyVarKind tv then
-             solveWithIdentity cv gw tv xi
+             solveWithIdentity eqv gw tv xi
          else return SPCantSolve
 {-
          else if tyVarKind tv `isSubKind` kxi then
@@ -634,13 +634,13 @@ trySpontaneousEqOneWay cv gw tv xi
   = return SPCantSolve
 
 ----------------
-trySpontaneousEqTwoWay :: CoVar -> CtFlavor -> TcTyVar -> TcTyVar -> TcS SPSolveResult
+trySpontaneousEqTwoWay :: EqVar -> CtFlavor -> TcTyVar -> TcTyVar -> TcS SPSolveResult
 -- Both tyvars are *touchable* MetaTyvars so there is only a chance for kind error here
-trySpontaneousEqTwoWay cv gw tv1 tv2
+trySpontaneousEqTwoWay eqv gw tv1 tv2
   | k1 `isSubKind` k2
-  , nicer_to_update_tv2 = solveWithIdentity cv gw tv2 (mkTyVarTy tv1)
+  , nicer_to_update_tv2 = solveWithIdentity eqv gw tv2 (mkTyVarTy tv1)
   | k2 `isSubKind` k1 
-  = solveWithIdentity cv gw tv1 (mkTyVarTy tv2)
+  = solveWithIdentity eqv gw tv1 (mkTyVarTy tv2)
   | otherwise -- None is a subkind of the other, but they are both touchable! 
   = return SPCantSolve
     -- do { addErrorTcS KindError gw (mkTyVarTy tv1) (mkTyVarTy tv2)
@@ -723,7 +723,7 @@ unification variables as RHS of type family equations: F xis ~ alpha.
 \begin{code}
 ----------------
 
-solveWithIdentity :: CoVar -> CtFlavor -> TcTyVar -> Xi -> TcS SPSolveResult
+solveWithIdentity :: EqVar -> CtFlavor -> TcTyVar -> Xi -> TcS SPSolveResult
 -- Solve with the identity coercion 
 -- Precondition: kind(xi) is a sub-kind of kind(tv)
 -- Precondition: CtFlavor is Wanted or Derived
@@ -731,7 +731,7 @@ solveWithIdentity :: CoVar -> CtFlavor -> TcTyVar -> Xi -> TcS SPSolveResult
 --     must work for Derived as well as Wanted
 -- Returns: workItem where 
 --        workItem = the new Given constraint
-solveWithIdentity cv wd tv xi 
+solveWithIdentity eqv wd tv xi 
   = do { traceTcS "Sneaky unification:" $ 
                        vcat [text "Coercion variable:  " <+> ppr wd, 
                              text "Coercion:           " <+> pprEq (mkTyVarTy tv) xi,
@@ -741,11 +741,11 @@ solveWithIdentity cv wd tv xi
 
        ; setWantedTyBind tv xi
        ; let refl_xi = mkReflCo xi
-       ; cv_given <- newGivenCoVar (mkTyVarTy tv) xi refl_xi
+       ; eqv_given <- newGivenEqVar (mkTyVarTy tv) xi refl_xi
 
-       ; when (isWanted wd) (setCoBind cv refl_xi)
+       ; when (isWanted wd) (setEqBind eqv refl_xi)
            -- We don't want to do this for Derived, that's why we use 'when (isWanted wd)'
-       ; return $ SPSolved (CTyEqCan { cc_id = cv_given
+       ; return $ SPSolved (CTyEqCan { cc_id = eqv_given
                                      , cc_flavor = mkSolvedFlavor wd UnkSkol
                                      , cc_tyvar  = tv, cc_rhs = xi }) }
 \end{code}
@@ -1018,50 +1018,50 @@ doInteractWithInert
 
 -- Class constraint and given equality: use the equality to rewrite
 -- the class constraint. 
-doInteractWithInert (CTyEqCan { cc_id = cv, cc_flavor = ifl, cc_tyvar = tv, cc_rhs = xi }) 
+doInteractWithInert (CTyEqCan { cc_id = eqv, cc_flavor = ifl, cc_tyvar = tv, cc_rhs = xi }) 
                     (CDictCan { cc_id = dv, cc_flavor = wfl, cc_class = cl, cc_tyargs = xis }) 
   | ifl `canRewrite` wfl 
   , tv `elemVarSet` tyVarsOfTypes xis
-  = do { rewritten_dict <- rewriteDict (cv,tv,xi) (dv,wfl,cl,xis)
+  = do { rewritten_dict <- rewriteDict (eqv,tv,xi) (dv,wfl,cl,xis)
             -- Continue with rewritten Dictionary because we can only be in the 
             -- interactWithEqsStage, so the dictionary is inert. 
        ; mkIRContinue "Eq/Cls" rewritten_dict KeepInert emptyWorkList }
     
 doInteractWithInert (CDictCan { cc_id = dv, cc_flavor = ifl, cc_class = cl, cc_tyargs = xis }) 
-           workItem@(CTyEqCan { cc_id = cv, cc_flavor = wfl, cc_tyvar = tv, cc_rhs = xi })
+           workItem@(CTyEqCan { cc_id = eqv, cc_flavor = wfl, cc_tyvar = tv, cc_rhs = xi })
   | wfl `canRewrite` ifl
   , tv `elemVarSet` tyVarsOfTypes xis
-  = do { rewritten_dict <- rewriteDict (cv,tv,xi) (dv,ifl,cl,xis)
+  = do { rewritten_dict <- rewriteDict (eqv,tv,xi) (dv,ifl,cl,xis)
        ; mkIRContinue "Cls/Eq" workItem DropInert (workListFromNonEq rewritten_dict) }
 
 -- Class constraint and given equality: use the equality to rewrite
 -- the class constraint.
-doInteractWithInert (CTyEqCan { cc_id = cv, cc_flavor = ifl, cc_tyvar = tv, cc_rhs = xi }) 
+doInteractWithInert (CTyEqCan { cc_id = eqv, cc_flavor = ifl, cc_tyvar = tv, cc_rhs = xi }) 
                     (CIrredEvCan { cc_id = id, cc_flavor = wfl, cc_ty = ty })
   | ifl `canRewrite` wfl
   , tv `elemVarSet` tyVarsOfType ty 
-  = do { rewritten_irred <- rewriteIrred (cv,tv,xi) (id,wfl,ty) 
-       ; mkIRStopK "Eq/Irred" rewritted_irred } 
+  = do { rewritten_irred <- rewriteIrred (eqv,tv,xi) (id,wfl,ty) 
+       ; mkIRStopK "Eq/Irred" rewritten_irred } 
 
 doInteractWithInert (CIrredEvCan { cc_id = id, cc_flavor = ifl, cc_ty = ty }) 
-           workItem@(CTyEqCan { cc_id = cv, cc_flavor = wfl, cc_tyvar = tv, cc_rhs = xi })
+           workItem@(CTyEqCan { cc_id = eqv, cc_flavor = wfl, cc_tyvar = tv, cc_rhs = xi })
   | wfl `canRewrite` ifl
   , tv `elemVarSet` tyVarsOfType ty
-  = do { rewritten_irred <- rewriteIrred (cv,tv,xi) (id,ifl,ty) 
+  = do { rewritten_irred <- rewriteIrred (eqv,tv,xi) (id,ifl,ty) 
        ; mkIRContinue "Irred/Eq" workItem DropInert rewritten_irred }
 
-doInteractWithInert (CTyEqCan { cc_id = cv, cc_flavor = ifl, cc_tyvar = tv, cc_rhs = xi }) 
+doInteractWithInert (CTyEqCan { cc_id = eqv, cc_flavor = ifl, cc_tyvar = tv, cc_rhs = xi }) 
                     (CIPCan { cc_id = ipid, cc_flavor = wfl, cc_ip_nm = nm, cc_ip_ty = ty }) 
   | ifl `canRewrite` wfl
   , tv `elemVarSet` tyVarsOfType ty 
-  = do { rewritten_ip <- rewriteIP (cv,tv,xi) (ipid,wfl,nm,ty) 
+  = do { rewritten_ip <- rewriteIP (eqv,tv,xi) (ipid,wfl,nm,ty) 
        ; mkIRContinue "Eq/IP" rewritten_ip KeepInert emptyWorkList } 
 
 doInteractWithInert (CIPCan { cc_id = ipid, cc_flavor = ifl, cc_ip_nm = nm, cc_ip_ty = ty }) 
-           workItem@(CTyEqCan { cc_id = cv, cc_flavor = wfl, cc_tyvar = tv, cc_rhs = xi })
+           workItem@(CTyEqCan { cc_id = eqv, cc_flavor = wfl, cc_tyvar = tv, cc_rhs = xi })
   | wfl `canRewrite` ifl
   , tv `elemVarSet` tyVarsOfType ty
-  = do { rewritten_ip <- rewriteIP (cv,tv,xi) (ipid,ifl,nm,ty) 
+  = do { rewritten_ip <- rewriteIP (eqv,tv,xi) (ipid,ifl,nm,ty) 
        ; mkIRContinue "IP/Eq" workItem DropInert (workListFromNonEq rewritten_ip) }
 
 -- Two implicit parameter constraints.  If the names are the same,
@@ -1084,15 +1084,15 @@ doInteractWithInert (CIPCan { cc_id = id1, cc_flavor = ifl, cc_ip_nm = nm1, cc_i
 
   | nm1 == nm2
   =  	-- See Note [When improvement happens]
-    do { co_var <- newCoVar ty2 ty1 -- See Note [Efficient Orientation]
+    do { eqv <- newEqVar ty2 ty1 -- See Note [Efficient Orientation]
        ; let flav = Wanted (combineCtLoc ifl wfl)
-       ; cans <- mkCanonical flav co_var
+       ; cans <- mkCanonical flav eqv
        ; case wfl of
            Given   {} -> pprPanic "Unexpected given IP" (ppr workItem)
            Derived {} -> pprPanic "Unexpected derived IP" (ppr workItem)
            Wanted  {} ->
-               do { setIPBind (cc_id workItem) $
-                    EvCast id1 (mkSymCo (mkCoVarCo co_var))
+               do { setEvBindWithEqs (cc_id workItem)
+                    (fmap (EvCast id1 . mkSymCo) (mkEqVarCo eqv))
                   ; mkIRStopK "IP/IP interaction (solved)" cans }
        }
 
@@ -1102,22 +1102,22 @@ doInteractWithInert (CIPCan { cc_id = id1, cc_flavor = ifl, cc_ip_nm = nm1, cc_i
 -- we know about equalities.
 
 -- Inert: equality, work item: function equality
-doInteractWithInert (CTyEqCan { cc_id = cv1, cc_flavor = ifl, cc_tyvar = tv, cc_rhs = xi1 }) 
-                    (CFunEqCan { cc_id = cv2, cc_flavor = wfl, cc_fun = tc
+doInteractWithInert (CTyEqCan { cc_id = eqv1, cc_flavor = ifl, cc_tyvar = tv, cc_rhs = xi1 }) 
+                    (CFunEqCan { cc_id = eqv2, cc_flavor = wfl, cc_fun = tc
                                , cc_tyargs = args, cc_rhs = xi2 })
   | ifl `canRewrite` wfl 
   , tv `elemVarSet` tyVarsOfTypes (xi2:args) -- Rewrite RHS as well
-  = do { rewritten_funeq <- rewriteFunEq (cv1,tv,xi1) (cv2,wfl,tc,args,xi2) 
+  = do { rewritten_funeq <- rewriteFunEq (eqv1,tv,xi1) (eqv2,wfl,tc,args,xi2) 
        ; mkIRStopK "Eq/FunEq" (workListFromEq rewritten_funeq) } 
          -- Must Stop here, because we may no longer be inert after the rewritting.
 
 -- Inert: function equality, work item: equality
-doInteractWithInert (CFunEqCan {cc_id = cv1, cc_flavor = ifl, cc_fun = tc
+doInteractWithInert (CFunEqCan {cc_id = eqv1, cc_flavor = ifl, cc_fun = tc
                               , cc_tyargs = args, cc_rhs = xi1 }) 
-           workItem@(CTyEqCan { cc_id = cv2, cc_flavor = wfl, cc_tyvar = tv, cc_rhs = xi2 })
+           workItem@(CTyEqCan { cc_id = eqv2, cc_flavor = wfl, cc_tyvar = tv, cc_rhs = xi2 })
   | wfl `canRewrite` ifl
   , tv `elemVarSet` tyVarsOfTypes (xi1:args) -- Rewrite RHS as well
-  = do { rewritten_funeq <- rewriteFunEq (cv2,tv,xi2) (cv1,ifl,tc,args,xi1) 
+  = do { rewritten_funeq <- rewriteFunEq (eqv2,tv,xi2) (eqv1,ifl,tc,args,xi1) 
        ; mkIRContinue "FunEq/Eq" workItem DropInert (workListFromEq rewritten_funeq) } 
          -- One may think that we could (KeepTransformedInert rewritten_funeq) 
          -- but that is wrong, because it may end up not being inert with respect 
@@ -1128,9 +1128,9 @@ doInteractWithInert (CFunEqCan {cc_id = cv1, cc_flavor = ifl, cc_fun = tc
          --      { F xis ~ [b], b ~ Maybe Int, a ~ [Maybe Int] } 
          -- At the end, which is *not* inert. So we should unfortunately DropInert here.
 
-doInteractWithInert (CFunEqCan { cc_id = cv1, cc_flavor = fl1, cc_fun = tc1
+doInteractWithInert (CFunEqCan { cc_id = eqv1, cc_flavor = fl1, cc_fun = tc1
                                , cc_tyargs = args1, cc_rhs = xi1 }) 
-           workItem@(CFunEqCan { cc_id = cv2, cc_flavor = fl2, cc_fun = tc2
+           workItem@(CFunEqCan { cc_id = eqv2, cc_flavor = fl2, cc_fun = tc2
                                , cc_tyargs = args2, cc_rhs = xi2 })
   | tc1 == tc2 && and (zipWith eqType args1 args2) 
   , Just GivenSolved <- isGiven_maybe fl1 
@@ -1140,44 +1140,44 @@ doInteractWithInert (CFunEqCan { cc_id = cv1, cc_flavor = fl1, cc_fun = tc1
   = mkIRStopK "Funeq/Funeq" emptyWorkList
 
   | fl1 `canSolve` fl2 && lhss_match
-  = do { cans <- rewriteEqLHS LeftComesFromInert  (mkCoVarCo cv1,xi1) (cv2,fl2,xi2) 
+  = do { cans <- rewriteEqLHS LeftComesFromInert  (eqv1,xi1) (eqv2,fl2,xi2) 
        ; mkIRStopK "FunEq/FunEq" cans } 
   | fl2 `canSolve` fl1 && lhss_match
-  = do { cans <- rewriteEqLHS RightComesFromInert (mkCoVarCo cv2,xi2) (cv1,fl1,xi1) 
+  = do { cans <- rewriteEqLHS RightComesFromInert (eqv2,xi2) (eqv1,fl1,xi1) 
        ; mkIRContinue "FunEq/FunEq" workItem DropInert cans }
   where
     lhss_match = tc1 == tc2 && eqTypes args1 args2 
 
-doInteractWithInert (CTyEqCan { cc_id = cv1, cc_flavor = fl1, cc_tyvar = tv1, cc_rhs = xi1 }) 
-           workItem@(CTyEqCan { cc_id = cv2, cc_flavor = fl2, cc_tyvar = tv2, cc_rhs = xi2 })
+doInteractWithInert (CTyEqCan { cc_id = eqv1, cc_flavor = fl1, cc_tyvar = tv1, cc_rhs = xi1 }) 
+           workItem@(CTyEqCan { cc_id = eqv2, cc_flavor = fl2, cc_tyvar = tv2, cc_rhs = xi2 })
 -- Check for matching LHS 
   | fl1 `canSolve` fl2 && tv1 == tv2 
-  = do { cans <- rewriteEqLHS LeftComesFromInert (mkCoVarCo cv1,xi1) (cv2,fl2,xi2) 
+  = do { cans <- rewriteEqLHS LeftComesFromInert (eqv1,xi1) (eqv2,fl2,xi2) 
        ; mkIRStopK "Eq/Eq lhs" cans } 
 
   | fl2 `canSolve` fl1 && tv1 == tv2 
-  = do { cans <- rewriteEqLHS RightComesFromInert (mkCoVarCo cv2,xi2) (cv1,fl1,xi1) 
+  = do { cans <- rewriteEqLHS RightComesFromInert (eqv2,xi2) (eqv1,fl1,xi1) 
        ; mkIRContinue "Eq/Eq lhs" workItem DropInert cans }
 
 -- Check for rewriting RHS 
   | fl1 `canRewrite` fl2 && tv1 `elemVarSet` tyVarsOfType xi2 
-  = do { rewritten_eq <- rewriteEqRHS (cv1,tv1,xi1) (cv2,fl2,tv2,xi2) 
+  = do { rewritten_eq <- rewriteEqRHS (eqv1,tv1,xi1) (eqv2,fl2,tv2,xi2) 
        ; mkIRStopK "Eq/Eq rhs" rewritten_eq }
 
   | fl2 `canRewrite` fl1 && tv2 `elemVarSet` tyVarsOfType xi1
-  = do { rewritten_eq <- rewriteEqRHS (cv2,tv2,xi2) (cv1,fl1,tv1,xi1) 
+  = do { rewritten_eq <- rewriteEqRHS (eqv2,tv2,xi2) (eqv1,fl1,tv1,xi1) 
        ; mkIRContinue "Eq/Eq rhs" workItem DropInert rewritten_eq } 
 
-doInteractWithInert (CTyEqCan   { cc_id = cv1, cc_flavor = fl1, cc_tyvar = tv1, cc_rhs = xi1 })
-                    (CFrozenErr { cc_id = cv2, cc_flavor = fl2 })
-  | fl1 `canRewrite` fl2 && tv1 `elemVarSet` tyVarsOfEvVar cv2
-  = do { rewritten_frozen <- rewriteFrozen (cv1, tv1, xi1) (cv2, fl2)
+doInteractWithInert (CTyEqCan   { cc_id = eqv1, cc_flavor = fl1, cc_tyvar = tv1, cc_rhs = xi1 })
+                    (CFrozenErr { cc_id = eqv2, cc_flavor = fl2 })
+  | fl1 `canRewrite` fl2 && tv1 `elemVarSet` tyVarsOfEvVar eqv2
+  = do { rewritten_frozen <- rewriteFrozen (eqv1, tv1, xi1) (eqv2, fl2)
        ; mkIRStopK "Frozen/Eq" rewritten_frozen }
 
-doInteractWithInert (CFrozenErr { cc_id = cv2, cc_flavor = fl2 })
-           workItem@(CTyEqCan   { cc_id = cv1, cc_flavor = fl1, cc_tyvar = tv1, cc_rhs = xi1 })
-  | fl1 `canRewrite` fl2 && tv1 `elemVarSet` tyVarsOfEvVar cv2
-  = do { rewritten_frozen <- rewriteFrozen (cv1, tv1, xi1) (cv2, fl2)
+doInteractWithInert (CFrozenErr { cc_id = eqv2, cc_flavor = fl2 })
+           workItem@(CTyEqCan   { cc_id = eqv1, cc_flavor = fl1, cc_tyvar = tv1, cc_rhs = xi1 })
+  | fl1 `canRewrite` fl2 && tv1 `elemVarSet` tyVarsOfEvVar eqv2
+  = do { rewritten_frozen <- rewriteFrozen (eqv1, tv1, xi1) (eqv2, fl2)
        ; mkIRContinue "Frozen/Eq" workItem DropInert rewritten_frozen }
 
 -- Fall-through case for all other situations
@@ -1185,16 +1185,16 @@ doInteractWithInert _ workItem = noInteraction workItem
 
 -------------------------
 -- Equational Rewriting 
-rewriteDict  :: (CoVar, TcTyVar, Xi) -> (DictId, CtFlavor, Class, [Xi]) -> TcS CanonicalCt
-rewriteDict (cv,tv,xi) (dv,gw,cl,xis) 
-  = do { let cos  = map (liftCoSubstWith [tv] [mkCoVarCo cv]) xis   -- xis[tv] ~ xis[xi]
-             args = substTysWith [tv] [xi] xis
-             con  = classTyCon cl 
-             dict_co = mkTyConAppCo con cos 
+rewriteDict  :: (EqVar, TcTyVar, Xi) -> (DictId, CtFlavor, Class, [Xi]) -> TcS CanonicalCt
+rewriteDict (eqv,tv,xi) (dv,gw,cl,xis) 
+  = do { let args = substTysWith [tv] [xi] xis
+             mk_dict_co cv = mkTyConAppCo con cos 
+               where cos  = map (liftCoSubstWith [tv] [cv]) xis   -- xis[tv] ~ xis[xi]
+                     con  = classTyCon cl 
        ; dv' <- newDictVar cl args 
        ; case gw of 
-           Wanted {}         -> setDictBind dv (EvCast dv' (mkSymCo dict_co))
-           Given {}          -> setDictBind dv' (EvCast dv dict_co) 
+           Wanted {}         -> setEvBindWithEqs dv  (fmapMk (EvCast dv' . mkSymCo . mk_dict_co) (mkEqVarCo eqv))
+           Given {}          -> setEvBindWithEqs dv' (fmapMk (EvCast dv . mk_dict_co) (mkEqVarCo eqv))
            Derived {}        -> return () -- Derived dicts we don't set any evidence
 
        ; return (CDictCan { cc_id = dv'
@@ -1202,26 +1202,26 @@ rewriteDict (cv,tv,xi) (dv,gw,cl,xis)
                           , cc_class = cl 
                           , cc_tyargs = args }) } 
 
-rewriteIrred :: (CoVar,TcTyVar,Xi) -> (EvVar,CtFlavor,TcType) -> TcS WorkList 
-rewriteIrred (cv,tv,xi) (id,gw,ty)
-  = do { let co = liftCoSubstWith [tv] [mkCoVarCo cv] ty     -- ty[tv] ~ ty[xi]
-             ty'   = substTyWith  [tv] [xi] ty
-       ; id' <- newCoVar ty' 
+rewriteIrred :: (EqVar,TcTyVar,Xi) -> (EvVar,CtFlavor,TcType) -> TcS WorkList 
+rewriteIrred (eqv,tv,xi) (id,gw,ty)
+  = do { let ty' = substTyWith  [tv] [xi] ty
+             mk_co cv = liftCoSubstWith [tv] [cv] ty     -- ty[tv] ~ ty[xi]
+       ; id' <- newEvVar ty' 
        ; case gw of 
-           Wanted {}         -> setEvBind id  (EvCast id' (mkSymCo co))
-           Given {}          -> setEvBind id' (EvCast id co) 
+           Wanted {}         -> setEvBindWithEqs id  (fmapMk (EvCast id' . mkSymCo . mk_co) (mkEqVarCo eqv))
+           Given {}          -> setEvBindWithEqs id' (fmapMk (EvCast id            . mk_co) (mkEqVarCo eqv)) 
            Derived {}        -> return () -- Derived ips: we don't set any evidence
 
        ; mkCanonical gw id' }
 
-rewriteIP :: (CoVar,TcTyVar,Xi) -> (EvVar,CtFlavor, IPName Name, TcType) -> TcS CanonicalCt 
-rewriteIP (cv,tv,xi) (ipid,gw,nm,ty) 
-  = do { let ip_co = liftCoSubstWith [tv] [mkCoVarCo cv] ty     -- ty[tv] ~ ty[xi]
-             ty'   = substTyWith   [tv] [xi] ty
+rewriteIP :: (EqVar,TcTyVar,Xi) -> (EvVar,CtFlavor, IPName Name, TcType) -> TcS CanonicalCt 
+rewriteIP (eqv,tv,xi) (ipid,gw,nm,ty) 
+  = do { let ty' = substTyWith   [tv] [xi] ty
+             mk_ip_co cv = liftCoSubstWith [tv] [cv] ty     -- ty[tv] ~ ty[xi]
        ; ipid' <- newIPVar nm ty' 
        ; case gw of 
-           Wanted {}         -> setIPBind ipid  (EvCast ipid' (mkSymCo ip_co))
-           Given {}          -> setIPBind ipid' (EvCast ipid ip_co) 
+           Wanted {}         -> setEvBindWithEqs ipid  (fmapMk (EvCast ipid' . mkSymCo . mk_ip_co) (mkEqVarCo eqv))
+           Given {}          -> setEvBindWithEqs ipid' (fmapMk (EvCast ipid            . mk_ip_co) (mkEqVarCo eqv))
            Derived {}        -> return () -- Derived ips: we don't set any evidence
 
        ; return (CIPCan { cc_id = ipid'
@@ -1229,107 +1229,122 @@ rewriteIP (cv,tv,xi) (ipid,gw,nm,ty)
                         , cc_ip_nm = nm
                         , cc_ip_ty = ty' }) }
    
-rewriteFunEq :: (CoVar,TcTyVar,Xi) -> (CoVar,CtFlavor,TyCon, [Xi], Xi) -> TcS CanonicalCt
-rewriteFunEq (cv1,tv,xi1) (cv2,gw, tc,args,xi2)                   -- cv2 :: F args ~ xi2
-  = do { let co_subst = liftCoSubstWith [tv] [mkCoVarCo cv1]
-             arg_cos  = map co_subst args
-             args'    = substTysWith [tv] [xi1] args
-             fun_co   = mkTyConAppCo tc arg_cos                -- fun_co :: F args ~ F args'
-
+rewriteFunEq :: (EqVar,TcTyVar,Xi) -> (EqVar,CtFlavor,TyCon, [Xi], Xi) -> TcS CanonicalCt
+rewriteFunEq (eqv1,tv,xi1) (eqv2,gw, tc,args,xi2)                   -- cv2 :: F args ~ xi2
+  = do { let args'    = substTysWith [tv] [xi1] args
              xi2'    = substTyWith [tv] [xi1] xi2
-             xi2_co  = co_subst xi2 -- xi2_co :: xi2 ~ xi2'
+             
+             mk_cos cv1 = (fun_co, xi2_co)
+               where co_subst = liftCoSubstWith [tv] [cv1]
+                     arg_cos  = map co_subst args
+                     fun_co   = mkTyConAppCo tc arg_cos                -- fun_co :: F args ~ F args'
+        
+                     xi2_co  = co_subst xi2 -- xi2_co :: xi2 ~ xi2'
 
-       ; cv2' <- newCoVar (mkTyConApp tc args') xi2'
+       ; eqv2' <- newEqVar (mkTyConApp tc args') xi2'
        ; case gw of 
-           Wanted {} -> setCoBind cv2  (fun_co         `mkTransCo` 
-                                        mkCoVarCo cv2' `mkTransCo` 
-                                        mkSymCo xi2_co)
-           Given {}  -> setCoBind cv2' (mkSymCo fun_co `mkTransCo` 
-                                        mkCoVarCo cv2  `mkTransCo` 
-                                        xi2_co)
+           Wanted {} -> setEqBindWithEqs eqv2
+                          (joinMk (\cv1 cv2' -> let (fun_co, xi2_co) = mk_cos cv1
+                                                in fun_co `mkTransCo` 
+                                                   cv2' `mkTransCo` 
+                                                   mkSymCo xi2_co)
+                                  (mkEqVarCo eqv1) (mkEqVarCo eqv2'))
+           Given {}  -> setEqBindWithEqs eqv2'
+                          (joinMk (\cv1 cv2 -> let (fun_co, xi2_co) = mk_cos cv1
+                                               in mkSymCo fun_co `mkTransCo` 
+                                                  cv2  `mkTransCo` 
+                                                  xi2_co)
+                                  (mkEqVarCo eqv1) (mkEqVarCo eqv2))
            Derived {} -> return () 
 
-       ; return (CFunEqCan { cc_id = cv2'
+       ; return (CFunEqCan { cc_id = eqv2'
                            , cc_flavor = gw
                            , cc_tyargs = args'
                            , cc_fun = tc 
                            , cc_rhs = xi2' }) }
 
 
-rewriteEqRHS :: (CoVar,TcTyVar,Xi) -> (CoVar,CtFlavor,TcTyVar,Xi) -> TcS WorkList
+rewriteEqRHS :: (EqVar,TcTyVar,Xi) -> (EqVar,CtFlavor,TcTyVar,Xi) -> TcS WorkList
 -- Use the first equality to rewrite the second, flavors already checked. 
 -- E.g.          c1 : tv1 ~ xi1   c2 : tv2 ~ xi2
 -- rewrites c2 to give
 --               c2' : tv2 ~ xi2[xi1/tv1]
 -- We must do an occurs check to sure the new constraint is canonical
 -- So we might return an empty bag
-rewriteEqRHS (cv1,tv1,xi1) (cv2,gw,tv2,xi2) 
+rewriteEqRHS (eqv1,tv1,xi1) (eqv2,gw,tv2,xi2) 
   | Just tv2' <- tcGetTyVar_maybe xi2'
   , tv2 == tv2'	 -- In this case xi2[xi1/tv1] = tv2, so we have tv2~tv2
-  = do { when (isWanted gw) (setCoBind cv2 (mkSymCo co2')) 
+  = do { when (isWanted gw) $ setEqBindWithEqs eqv2 (fmapMk (mkSymCo . mk_co2') (mkEqVarCo eqv1))
        ; return emptyWorkList } 
   | otherwise
-  = do { cv2' <- newCoVar (mkTyVarTy tv2) xi2'
+  = do { eqv2' <- newEqVar (mkTyVarTy tv2) xi2'
        ; case gw of
-             Wanted {} -> setCoBind cv2 $ mkCoVarCo cv2' `mkTransCo` 
-                                          mkSymCo co2'
-             Given {}  -> setCoBind cv2' $ mkCoVarCo cv2 `mkTransCo` 
-                                           co2'
+             Wanted {} -> setEqBindWithEqs eqv2 (joinMk (\cv1 cv2' -> cv2' `mkTransCo` mkSymCo (mk_co2' cv1))
+                                                        (mkEqVarCo eqv1) (mkEqVarCo eqv2'))
+             Given {}  -> setEqBindWithEqs eqv2' (joinMk (\cv1 cv2 -> cv2 `mkTransCo`  mk_co2' cv1)
+                                                         (mkEqVarCo eqv1) (mkEqVarCo eqv2))
              Derived {} -> return ()
-       ; canEqToWorkList gw cv2' (mkTyVarTy tv2) xi2' }
+       ; canEqToWorkList gw eqv2' (mkTyVarTy tv2) xi2' }
   where 
     xi2' = substTyWith [tv1] [xi1] xi2 
-    co2' = liftCoSubstWith [tv1] [mkCoVarCo cv1] xi2  -- xi2 ~ xi2[xi1/tv1]
+    mk_co2' cv1 = liftCoSubstWith [tv1] [cv1] xi2  -- xi2 ~ xi2[xi1/tv1]
 
-rewriteEqLHS :: WhichComesFromInert -> (Coercion,Xi) -> (CoVar,CtFlavor,Xi) -> TcS WorkList
+rewriteEqLHS :: WhichComesFromInert -> (EqVar,Xi) -> (EqVar,CtFlavor,Xi) -> TcS WorkList
 -- Used to ineract two equalities of the following form: 
 -- First Equality:   co1: (XXX ~ xi1)  
 -- Second Equality:  cv2: (XXX ~ xi2) 
 -- Where the cv1 `canRewrite` cv2 equality 
 -- We have an option of creating new work (xi1 ~ xi2) OR (xi2 ~ xi1), 
 --    See Note [Efficient Orientation] for that 
-rewriteEqLHS LeftComesFromInert (co1,xi1) (cv2,gw,xi2) 
-  = do { cv2' <- newCoVar xi2 xi1 
+rewriteEqLHS LeftComesFromInert (eqv1,xi1) (eqv2,gw,xi2) 
+  = do { eqv2' <- newEqVar xi2 xi1 
        ; case gw of 
-           Wanted {} -> setCoBind cv2 $ 
-                        co1 `mkTransCo` mkSymCo (mkCoVarCo cv2')
-           Given {}  -> setCoBind cv2' $ 
-                        mkSymCo (mkCoVarCo cv2) `mkTransCo` co1 
+           Wanted {} -> setEqBindWithEqs eqv2
+                        (joinMk (\cv1 cv2' -> cv1 `mkTransCo` mkSymCo cv2')
+                                (mkEqVarCo eqv1) (mkEqVarCo eqv2'))
+           Given {}  -> setEqBindWithEqs eqv2'
+                        (joinMk (\cv1 cv2 -> mkSymCo cv2 `mkTransCo` cv1)
+                                (mkEqVarCo eqv1) (mkEqVarCo eqv2))
            Derived {} -> return ()
-       ; mkCanonical gw cv2' }
+       ; mkCanonical gw eqv2' }
 
-rewriteEqLHS RightComesFromInert (co1,xi1) (cv2,gw,xi2) 
-  = do { cv2' <- newCoVar xi1 xi2
+rewriteEqLHS RightComesFromInert (eqv1,xi1) (eqv2,gw,xi2) 
+  = do { eqv2' <- newEqVar xi1 xi2
        ; case gw of
-           Wanted {} -> setCoBind cv2 $
-                        co1 `mkTransCo` mkCoVarCo cv2'
-           Given {}  -> setCoBind cv2' $
-                        mkSymCo co1 `mkTransCo` mkCoVarCo cv2
+           Wanted {} -> setEqBindWithEqs eqv2
+                        (joinMk mkTransCo (mkEqVarCo eqv1) (mkEqVarCo eqv2'))
+           Given {}  -> setEqBindWithEqs eqv2'
+                        (joinMk (\cv1 cv2 -> mkSymCo cv1 `mkTransCo` cv2)
+                                (mkEqVarCo eqv1) (mkEqVarCo eqv2))
            Derived {} -> return ()
-       ; mkCanonical gw cv2' }
+       ; mkCanonical gw eqv2' }
 
-rewriteFrozen :: (CoVar,TcTyVar,Xi) -> (CoVar,CtFlavor) -> TcS WorkList
-rewriteFrozen (cv1, tv1, xi1) (cv2, fl2)
-  = do { cv2' <- newCoVar ty2a' ty2b'  -- ty2a[xi1/tv1] ~ ty2b[xi1/tv1]
+rewriteFrozen :: (EqVar,TcTyVar,Xi) -> (EqVar,CtFlavor) -> TcS WorkList
+rewriteFrozen (eqv1, tv1, xi1) (eqv2, fl2)
+  = do { eqv2' <- newEqVar ty2a' ty2b'  -- ty2a[xi1/tv1] ~ ty2b[xi1/tv1]
        ; case fl2 of
-             Wanted {} -> setCoBind cv2 $ co2a'                `mkTransCo`
-                       	         	  mkCoVarCo cv2' `mkTransCo`
-                       	         	  mkSymCo co2b'
+             Wanted {} -> setEqBindWithEqs eqv2
+                            (joinMk (\cv1 cv2' -> mk_co2a' cv1   `mkTransCo`
+                       	         	          cv2' `mkTransCo`
+                       	         	          mkSymCo (mk_co2b' cv1))
+                                    (mkEqVarCo eqv1) (mkEqVarCo eqv2'))
 
-             Given {} -> setCoBind cv2' $ mkSymCo co2a'  `mkTransCo`
-                      	 		  mkCoVarCo cv2  `mkTransCo`
-                      	 		  co2b'
+             Given {} -> setEqBindWithEqs eqv2'
+                           (joinMk (\cv1 cv2 -> mkSymCo (mk_co2a' cv1) `mkTransCo`
+                         		        cv2 `mkTransCo`
+                         		        mk_co2b' cv1)
+                                   (mkEqVarCo eqv1) (mkEqVarCo eqv2))
 
              Derived {} -> return ()
 
-      ; return (workListFromNonEq $ CFrozenErr { cc_id = cv2', cc_flavor = fl2 }) }
+      ; return (workListFromNonEq $ CFrozenErr { cc_id = eqv2', cc_flavor = fl2 }) }
   where
-    (ty2a, ty2b) = coVarKind cv2          -- cv2 : ty2a ~ ty2b
+    (ty2a, ty2b) = getEqPredTys (evVarPred eqv2)        -- cv2 : ty2a ~ ty2b
     ty2a' = substTyWith [tv1] [xi1] ty2a
     ty2b' = substTyWith [tv1] [xi1] ty2b
 
-    co2a' = liftCoSubstWith [tv1] [mkCoVarCo cv1] ty2a  -- ty2a ~ ty2a[xi1/tv1]
-    co2b' = liftCoSubstWith [tv1] [mkCoVarCo cv1] ty2b  -- ty2b ~ ty2b[xi1/tv1]
+    mk_co2a' cv1 = liftCoSubstWith [tv1] [cv1] ty2a  -- ty2a ~ ty2a[xi1/tv1]
+    mk_co2b' cv1 = liftCoSubstWith [tv1] [cv1] ty2b  -- ty2b ~ ty2b[xi1/tv1]
 
 solveOneFromTheOther_ExtraWork :: String -> (EvTerm, CtFlavor) 
                                -> CanonicalCt -> WorkList -> TcS InteractResult
@@ -1863,7 +1878,7 @@ doTopReact _inerts (CFunEqCan { cc_flavor = fl })
   = return NoTopInt -- If Solved, no more interactions should happen
 
 -- Otherwise, it's a Given, Derived, or Wanted
-doTopReact _inerts workItem@(CFunEqCan { cc_id = cv, cc_flavor = fl
+doTopReact _inerts workItem@(CFunEqCan { cc_id = eqv, cc_flavor = fl
                                        , cc_fun = tc, cc_tyargs = args, cc_rhs = xi })
   = ASSERT (isSynFamilyTyCon tc)   -- No associated data families have reached that far 
     do { match_res <- matchFam tc args   -- See Note [MATCHING-SYNONYMS]
@@ -1878,9 +1893,9 @@ doTopReact _inerts workItem@(CFunEqCan { cc_id = cv, cc_flavor = fl
                             -- See Note [Type synonym families] in TyCon
                          coe = mkAxInstCo coe_tc rep_tys 
                    ; case fl of
-                       Wanted {} -> do { cv' <- newCoVar rhs_ty xi
-                                       ; setCoBind cv $ coe `mkTransCo` mkCoVarCo cv'
-                                       ; can_cts <- mkCanonical fl cv'
+                       Wanted {} -> do { eqv' <- newEqVar rhs_ty xi
+                                       ; setEqBindWithEqs eqv (fmapMk (coe `mkTransCo`) (mkEqVarCo eqv'))
+                                       ; can_cts <- mkCanonical fl eqv'
                                        ; let solved = workItem { cc_flavor = solved_fl }
                                              solved_fl = mkSolvedFlavor fl UnkSkol
                                        ; if isEmptyWorkList can_cts then 
@@ -1889,15 +1904,15 @@ doTopReact _inerts workItem@(CFunEqCan { cc_id = cv, cc_flavor = fl
                                               SomeTopInt { tir_new_work = can_cts
                                                          , tir_new_inert = ContinueWith solved }
                                        }
-                       Given {} -> do { cv' <- newGivenCoVar xi rhs_ty $ 
-                                               mkSymCo (mkCoVarCo cv) `mkTransCo` coe 
-                                      ; can_cts <- mkCanonical fl cv'
+                       Given {} -> do { eqv' <- newEqVar xi rhs_ty
+                                      ; setEqBindWithEqs eqv' (fmapMk (\cv -> mkSymCo cv `mkTransCo` coe) (mkEqVarCo eqv))
+                                      ; can_cts <- mkCanonical fl eqv'
                                       ; return $ 
                                         SomeTopInt { tir_new_work = can_cts
                                                    , tir_new_inert = Stop }
                                       }
-                       Derived {} -> do { cv' <- newDerivedId (EqPred xi rhs_ty)
-                                        ; can_cts <- mkCanonical fl cv'
+                       Derived {} -> do { eqv' <- newDerivedId (mkEqPred (xi, rhs_ty))
+                                        ; can_cts <- mkCanonical fl eqv'
                                         ; return $ 
                                           SomeTopInt { tir_new_work = can_cts
                                                      , tir_new_inert = Stop }

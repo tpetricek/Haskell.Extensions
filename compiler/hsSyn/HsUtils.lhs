@@ -173,25 +173,25 @@ mkHsWrap :: HsWrapper -> HsExpr id -> HsExpr id
 mkHsWrap co_fn e | isIdHsWrapper co_fn = e
 		 | otherwise	       = HsWrap co_fn e
 
-mkHsWrapCo :: Coercion -> HsExpr id -> HsExpr id
-mkHsWrapCo (Refl _) e = e
-mkHsWrapCo co       e = mkHsWrap (WpCast co) e
+mkHsWrapCo :: HsCoWrapper -> HsExpr id -> HsExpr id
+mkHsWrapCo ([], Refl _) e = e
+mkHsWrapCo co           e = mkHsWrap (WpCast co) e
 
-mkLHsWrapCo :: Coercion -> LHsExpr id -> LHsExpr id
-mkLHsWrapCo (Refl _) e         = e
-mkLHsWrapCo co       (L loc e) = L loc (mkHsWrap (WpCast co) e)
+mkLHsWrapCo :: HsCoWrapper -> LHsExpr id -> LHsExpr id
+mkLHsWrapCo ([], Refl _) e         = e
+mkLHsWrapCo co           (L loc e) = L loc (mkHsWrap (WpCast co) e)
 
-coToHsWrapper :: Coercion -> HsWrapper
-coToHsWrapper (Refl _) = idHsWrapper
-coToHsWrapper co       = WpCast co
+coToHsWrapper :: HsCoWrapper -> HsWrapper
+coToHsWrapper ([], Refl _) = idHsWrapper
+coToHsWrapper co           = WpCast co
 
 mkHsWrapPat :: HsWrapper -> Pat id -> Type -> Pat id
 mkHsWrapPat co_fn p ty | isIdHsWrapper co_fn = p
 		       | otherwise	     = CoPat co_fn p ty
 
-mkHsWrapPatCo :: Coercion -> Pat id -> Type -> Pat id
-mkHsWrapPatCo (Refl _) pat _  = pat
-mkHsWrapPatCo co       pat ty = CoPat (WpCast co) pat ty
+mkHsWrapPatCo :: HsCoWrapper -> Pat id -> Type -> Pat id
+mkHsWrapPatCo ([], Refl _) pat _  = pat
+mkHsWrapPatCo co           pat ty = CoPat (WpCast co) pat ty
 
 mkHsDictLet :: TcEvBinds -> LHsExpr Id -> LHsExpr Id
 mkHsDictLet ev_binds expr = mkLHsWrap (mkWpLet ev_binds) expr

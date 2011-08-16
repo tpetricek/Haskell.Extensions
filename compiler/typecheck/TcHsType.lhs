@@ -590,9 +590,8 @@ ds_type (HsOpTy ty1 (L span op) ty2) = do
 ds_type ty@(HsAppTy _ _)
   = ds_app ty []
 
-ds_type (HsPredTy pred) = do
-    pred' <- dsHsPred pred
-    return (mkPredTy pred')
+ds_type (HsPredTy pred)
+  = dsHsPred pred
 
 ds_type (HsForAllTy _ tv_names ctxt ty)
   = tcTyVarBndrs tv_names               $ \ tyvars -> do
@@ -655,7 +654,7 @@ dsHsPred (HsClassP class_name tys)
 dsHsPred (HsEqualP ty1 ty2)
   = do { arg_ty1 <- dsHsType ty1
        ; arg_ty2 <- dsHsType ty2
-       ; return (mkLiftedEqPred arg_ty1 arg_ty2)
+       ; return (mkEqPred (arg_ty1, arg_ty2))
        }
 dsHsPred (HsIParam name ty)
   = do { arg_ty <- dsHsType ty

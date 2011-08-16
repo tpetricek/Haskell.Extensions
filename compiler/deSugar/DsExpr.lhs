@@ -86,14 +86,14 @@ dsValBinds (ValBindsOut binds _) body = foldrM ds_val_bind body binds
 dsIPBinds :: HsIPBinds Id -> CoreExpr -> DsM CoreExpr
 dsIPBinds (IPBinds ip_binds ev_binds) body
   = do	{ ds_ev_binds <- dsTcEvBinds ev_binds
-	; let inner = wrapDsEvBinds ds_ev_binds body
+	; let inner = mkCoreLets ds_ev_binds body
 		-- The dict bindings may not be in 
 		-- dependency order; hence Rec
 	; foldrM ds_ip_bind inner ip_binds }
   where
     ds_ip_bind (L _ (IPBind n e)) body
       = do e' <- dsLExpr e
-           return (Let (NonRec (ipNameName n) e') body)
+           return (Let (NonRec (ipNameName n) (mkIPBox n e')) body)
 
 -------------------------
 ds_val_bind :: (RecFlag, LHsBinds Id) -> CoreExpr -> DsM CoreExpr
@@ -139,7 +139,7 @@ dsStrictBind (AbsBinds { abs_tvs = [], abs_ev_vars = []
              bind_export (_, g, l, _) b = bindNonRec g (Var l) b
        ; body2 <- foldlBagM (\body bind -> dsStrictBind (unLoc bind) body) 
                             body1 binds 
-       ; return (wrapDsEvBinds ds_ev_binds body2) }
+       ; return (mkCoreLets ds_ev_binds body2) }
 
 dsStrictBind (FunBind { fun_id = L _ fun, fun_matches = matches, fun_co_fn = co_fn 
 	              , fun_tick = tick, fun_infix = inf }) body
@@ -218,7 +218,7 @@ dsExpr :: HsExpr Id -> DsM CoreExpr
 dsExpr (HsPar e) 	      = dsLExpr e
 dsExpr (ExprWithTySigOut e _) = dsLExpr e
 dsExpr (HsVar var)     	      = return (varToCoreExpr var)   -- See Note [Desugaring vars]
-dsExpr (HsIPVar ip)    	      = return (Var (ipNameName ip))
+dsExpr (HsIPVar ip)    	      = return (mkIPUnbox ip)
 dsExpr (HsLit lit)     	      = dsLit lit
 dsExpr (HsOverLit lit) 	      = dsOverLit lit
 
@@ -551,7 +551,7 @@ dsExpr expr@(RecordUpd record_expr (HsRecFields { rec_flds = fields })
 			-- Tediously wrap the application in a cast
 			-- Note [Update for GADTs]
 		 wrapped_rhs | null eq_spec = rhs
-			     | otherwise    = mkLHsWrap (WpCast wrap_co) rhs
+			     | otherwise    = mkLHsWrap (WpCast ([], wrap_co)) rhs
 		 wrap_co = mkTyConAppCo tycon [ lookup tv ty
 					      | (tv,ty) <- univ_tvs `zip` out_inst_tys]
 		 lookup univ_tv ty = case lookupVarEnv wrap_subst univ_tv of

@@ -8,8 +8,7 @@ module BuildTyCl (
 	buildSynTyCon, 
         buildAlgTyCon, 
         buildDataCon,
-        buildIParam,
-	TcMethInfo, buildClass,
+        TcMethInfo, buildClass,
 	mkAbstractTyConRhs, 
 	mkNewTyConRhs, mkDataTyConRhs, 
         newImplicitBinder
@@ -28,6 +27,7 @@ import MkId
 import Class
 import TyCon
 import Type
+import TysPrim          ( factKind )
 import Coercion
 
 import TcRnMonad
@@ -216,39 +216,11 @@ mkDataConStupidTheta tycon arg_tys univ_tvs
 
     arg_tyvars      = tyVarsOfTypes arg_tys
     in_arg_tys pred = not $ isEmptyVarSet $ 
-		      tyVarsOfPred pred `intersectVarSet` arg_tyvars
+		      tyVarsOfType pred `intersectVarSet` arg_tyvars
 \end{code}
 
 
 ------------------------------------------------------
-\begin{code}
-buildIParam :: Name -> TcRnIf m n TyCon
-buildIParam ip_name = do
-    -- Reuse the OccName generation for classes for now. May want to revisit this.
-    tycon_name <- newImplicitBinder ip_name mkClassTyConOcc
-    datacon_name <- newImplicitBinder ip_name mkClassDataConOcc
-
-    -- FIXME: must get same tycon/datacon unique everywhere!!
-    -- FIXME: ipTyCon
-    fixM $ \rec_tycon -> do -- Only name generation inside loop
-        let tv = alphaTyVar
-        dict_con <- buildDataCon datacon_name
-                       False    -- Not declared infix
-                       [HsNoBang]
-                       [{- No fields -}]
-                       [tv]
-                       [{- no existentials -}]
-                       [{- No GADT equalities -}] 
-                       [{- No theta -}]
-                       [mkTyVarTy tv]
-                       (mkTyConApp rec_tycon [mkTyVarTy tv])
-                       rec_tycon
-        rhs <- mkNewTyConRhs tycon_name rec_tycon dict_con
-        let ip_kind = mkArrowKind (tyVarKind tv) factKind
-        return $ mkIParamTyCon tycon_name ip_kind tv
-                               rhs rec_clas NonRecursive
-\end{code}
-
 \begin{code}
 type TcMethInfo = (Name, DefMethSpec, Type)  
         -- A temporary intermediate, to communicate between 
@@ -290,13 +262,12 @@ buildClass no_unf class_name tvs sc_theta fds ats sig_stuff tc_isrec
 	      -- (We used to call them D_C, but now we can have two different
 	      --  superclasses both called C!)
 	
-	; let use_newtype = isSingleton arg_tys && not (any isEqPred sc_theta)
+	; let use_newtype = isSingleton arg_tys
 		-- Use a newtype if the data constructor 
 		--   (a) has exactly one value field
 		--       i.e. exactly one operation or superclass taken together
-                --   (b) it's of lifted type 
-		-- (NB: for (b) don't look at the classes in sc_theta, because
-		--      they are part of the knot!  Hence isEqPred.)
+                --   (b) that value is of lifted type (which they always are, because
+                --       we box equality superclasses)
 		-- See note [Class newtypes and equality predicates]
 
 		-- We treat the dictionary superclasses as ordinary arguments.  

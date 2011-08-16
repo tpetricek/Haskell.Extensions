@@ -45,10 +45,14 @@ module Type (
 	
 	-- Pred types
         mkFamilyTyConApp,
-	mkDictTy, isDictLikeTy,
+	isDictLikeTy,
         mkEqPred, mkClassPred,
 	mkIPPred,
-    noParenPred, isClassPred, isEqPred, isIPPred,
+        noParenPred, isClassPred, isEqPred, isIPPred,
+        mkPrimEqType,
+
+        -- Deconstructing predicate types
+        PredTree(..), predTreePredType, predTypePredTree,
 
 	-- ** Common type constructors
         funTyCon,
@@ -58,11 +62,14 @@ module Type (
 
 	-- (Lifting and boxity)
 	isUnLiftedType, isUnboxedTupleType, isAlgType, isClosedAlgType,
-	isPrimitiveType, isStrictType, isStrictPred, 
+	isPrimitiveType, isStrictType,
 
 	-- * Main data types representing Kinds
 	-- $kind_subtyping
         Kind, SimpleKind, KindVar,
+
+        -- ** Finding the kind of a type
+        typeKind,
         
         -- ** Common Kinds and SuperKinds
         liftedTypeKind, unliftedTypeKind, openTypeKind,
@@ -83,7 +90,7 @@ module Type (
 	eqPred, eqPredX, cmpPred, eqKind,
 
 	-- * Forcing evaluation of types
-        seqType, seqTypes, seqPred,
+        seqType, seqTypes,
 
         -- * Other views onto Types
         coreView, tcView, 
@@ -112,12 +119,12 @@ module Type (
 
 	-- ** Performing substitution on types
 	substTy, substTys, substTyWith, substTysWith, substTheta, 
-        substPred, substTyVar, substTyVars, substTyVarBndr,
+        substTyVar, substTyVars, substTyVarBndr,
         cloneTyVarBndr, deShadowTy, lookupTyVar, 
 
 	-- * Pretty-printing
 	pprType, pprParendType, pprTypeApp, pprTyThingCategory, pprTyThing, pprForAll,
-	pprPred, pprEqPred, pprTheta, pprThetaArrowTy, pprClassPred, 
+	pprEqPred, pprTheta, pprThetaArrowTy, pprClassPred, 
         pprKind, pprParendKind,
 	
 	pprSourceTyCon
@@ -139,7 +146,7 @@ import VarSet
 import Class
 import TyCon
 import TysPrim
-import {-# SOURCE #-} TysWiredIn ( eqTyCon, ipTyCon )
+import {-# SOURCE #-} TysWiredIn ( eqTyCon, ipTyCon, mkBoxedTupleTy )
 import PrelNames	         ( eqTyConKey, eqPrimTyConKey )
 
 -- others
@@ -769,8 +776,8 @@ isEqPred ty = case tyConAppTyCon_maybe ty of
     Just tyCon -> tyCon `hasKey` eqTyConKey
     _          -> False
 isIPPred ty = case tyConAppTyCon_maybe ty of
-    Just tyCon | Just _ <- tyConIP_maybe -> True
-    _                                    -> False
+    Just tyCon | Just _ <- tyConIP_maybe tyCon -> True
+    _                                          -> False
 \end{code}
 
 Make PredTypes
@@ -851,6 +858,38 @@ we ended up with something like
 
 This is all a bit ad-hoc; eg it relies on knowing that implication
 constraints build tuples.
+
+
+Decomposing PredType
+
+\begin{code}
+data PredTree = ClassPred Class [Type]
+              | EqPred Type Type
+              | IPPred (IPName Name) Type
+              | TuplePred [PredTree]
+              | IrredPred PredType
+
+predTreePredType :: PredTree -> PredType
+predTreePredType (ClassPred clas tys) = mkClassPred clas tys
+predTreePredType (EqPred ty1 ty2)     = mkEqPred (ty1, ty2)
+predTreePredType (IPPred ip ty)       = mkIPPred ip ty
+predTreePredType (TuplePred tys)      = mkBoxedTupleTy (map predTreePredType tys)
+predTreePredType (IrredPred ty)       = ty
+
+predTypePredTree :: PredType -> PredTree
+predTypePredTree ev_ty = case splitTyConApp_maybe ev_ty of
+    Just (tc, tys) | Just clas <- tyConClass_maybe tc
+                   -> ClassPred clas tys
+    Just (tc, tys) | tc `hasKey` eqTyConKey
+                   , let [ty1, ty2] = tys
+                   -> EqPred ty1 ty2
+    Just (tc, tys) | Just ip <- tyConIP_maybe tc
+                   , let [ty] = tys
+                   -> IPPred ip ty
+    Just (tc, tys) | isTupleTyCon tc
+                   -> TuplePred (map predTypePredTree tys)
+    _ -> IrredPred ev_ty
+\end{code}
 
 %************************************************************************
 %*									*

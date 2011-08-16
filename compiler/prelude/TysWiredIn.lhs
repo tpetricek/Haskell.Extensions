@@ -57,7 +57,10 @@ module TysWiredIn (
 	parrTyCon, parrFakeCon, isPArrTyCon, isPArrFakeCon,
 	parrTyCon_RDR, parrTyConName,
 
-        -- * Implicit parameters DataCon (TyCon is in TysPrim)
+        -- * Equality predicates
+        eqTyCon_RDR, eqTyCon, eqTyConName, eqBoxDataCon,
+
+        -- * Implicit parameter predicates
         ipTyCon, ipDataCon
     ) where
 
@@ -78,9 +81,10 @@ import TyCon
 import TypeRep
 import RdrName
 import Name
-import BasicTypes       ( Arity, RecFlag(..), Boxity(..), isBoxed, HsBang(..) )
+import BasicTypes       ( IPName(..), ipNameName, Arity, RecFlag(..), Boxity(..), isBoxed, HsBang(..) )
 import Unique           ( incrUnique, mkTupleTyConUnique,
 			  mkTupleDataConUnique, mkPArrDataConUnique )
+import UniqSupply       ( mkMaskedUniqueGrimily )
 import Data.Array
 import FastString
 import Outputable
@@ -140,8 +144,8 @@ mkWiredInDataConName built_in modu fs unique datacon
 		  built_in
 
 eqTyConName, eqBoxDataConName :: Name
-eqTyConName      = mkWiredInTyConName   UserSyntax gHC_TYPES (fsLit "~") eqTyConKey eqTyCon
-eqBoxDataConName = mkWiredInDataConName UserSyntax gHC_TYPES (fsLit "EqBox") eqBoxDataConKey
+eqTyConName      = mkWiredInTyConName   UserSyntax gHC_TYPES (fsLit "~")     eqTyConKey      eqTyCon
+eqBoxDataConName = mkWiredInDataConName UserSyntax gHC_TYPES (fsLit "EqBox") eqBoxDataConKey eqBoxDataCon
 
 charTyConName, charDataConName, intTyConName, intDataConName :: Name
 charTyConName	  = mkWiredInTyConName   UserSyntax gHC_TYPES (fsLit "Char") charTyConKey charTyCon
@@ -172,7 +176,7 @@ parrDataConName = mkWiredInDataConName UserSyntax
                     gHC_PARR' (fsLit "PArr") parrDataConKey parrDataCon
 
 boolTyCon_RDR, false_RDR, true_RDR, intTyCon_RDR, charTyCon_RDR,
-    intDataCon_RDR, listTyCon_RDR, consDataCon_RDR, parrTyCon_RDR:: RdrName
+    intDataCon_RDR, listTyCon_RDR, consDataCon_RDR, parrTyCon_RDR, eqTyCon_RDR :: RdrName
 boolTyCon_RDR   = nameRdrName boolTyConName
 false_RDR	= nameRdrName falseDataConName
 true_RDR	= nameRdrName trueDataConName
@@ -182,6 +186,7 @@ intDataCon_RDR	= nameRdrName intDataConName
 listTyCon_RDR	= nameRdrName listTyConName
 consDataCon_RDR = nameRdrName consDataConName
 parrTyCon_RDR	= nameRdrName parrTyConName
+eqTyCon_RDR     = nameRdrName eqTyConName
 \end{code}
 
 
@@ -341,12 +346,12 @@ ipTyDataCon n = (tycon, datacon)
   where
     -- Reuse the OccName generation for classes for now. May want to revisit this.
     tycon_u    = mkIPUnique n mkClassTyConOcc
-    datacon_u    = mkIPUnique n mkClassDataConOcc
+    datacon_u  = mkIPUnique n mkClassDataConOcc
     
     tycon_name = mkPrimTc (fsLit ("?" ++ getOccString (ipNameName n))) tycon_u tycon
     tycon      = mkAlgTyCon tycon_name
-                   (liftedTypeKind `mkArrowKind` factKind)
-                   [alphaTyVar]
+                   (argTypeKind `mkArrowKind` factKind)
+                   [argAlphaTyVar]
                    []      -- No stupid theta
                    (DataTyCon [datacon] False)
                    (IPTyCon n)
@@ -354,7 +359,7 @@ ipTyDataCon n = (tycon, datacon)
                    False
 
     datacon_name = mkWiredInDataConName UserSyntax gHC_TYPES (fsLit "IPBox") datacon_u datacon
-    datacon      = pcDataCon datacon_name [alphaTyVar] [mkTyVarTy alphaTyVar] tycon
+    datacon      = pcDataCon datacon_name [argAlphaTyVar] [mkTyVarTy argAlphaTyVar] tycon
 \end{code}
 
 %************************************************************************
@@ -375,7 +380,7 @@ eqTyCon = mkAlgTyCon eqTyConName
             False
     
 eqBoxDataCon :: DataCon
-eqBoxDataCon = pcDataCon eqBoxDataConName [alphaTyVar, betaTyVar] (mkTyConVarApps eqPrimTyCon [alphaTyVar, betaTyVar]) eqTyCon
+eqBoxDataCon = pcDataCon eqBoxDataConName [alphaTyVar, betaTyVar] [TyConApp eqPrimTyCon [mkTyVarTy alphaTyVar, mkTyVarTy betaTyVar]] eqTyCon
 \end{code}
 
 \begin{code}

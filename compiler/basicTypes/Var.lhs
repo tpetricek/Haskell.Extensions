@@ -1,4 +1,4 @@
-%
+EvVa%
 % (c) The University of Glasgow 2006
 % (c) The GRASP/AQUA Project, Glasgow University, 1992-1998
 %
@@ -32,7 +32,7 @@
 
 module Var (
         -- * The main data type and synonyms
-        Var, TyVar, CoVar, Id, DictId, DFunId, EvVar, EvId, IpId,
+        Var, TyVar, CoVar, Id, DictId, DFunId, EvVar, EqVar, EvId, IpId,
 
 	-- ** Taking 'Var's apart
 	varName, varUnique, varType, 
@@ -98,11 +98,12 @@ type DFunId = Id	-- A dictionary function
 type EvId   = Id        -- Term-level evidence: DictId or IpId
 type DictId = EvId	-- A dictionary variable
 type IpId   = EvId      -- A term-level implicit parameter
+type EqVar  = EvId      -- Boxed equality evidence
 
 type TyVar = Var
 type CoVar = Id		-- A coercion variable is simply an Id
-			-- variable of kind @#@. Hence its
-			-- 'varType' is always @Eq ty1 ty2@
+			-- variable of kind @#@. Its
+			-- 'varType' is always @Eq# ty1 ty2@
 \end{code}
 
 %************************************************************************

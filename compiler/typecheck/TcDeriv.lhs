@@ -1042,7 +1042,7 @@ cond_functorOK allowFunctions (_, rep_tc)
     tc_tvs            = tyConTyVars rep_tc
     Just (_, last_tv) = snocView tc_tvs
     bad_stupid_theta  = filter is_bad (tyConStupidTheta rep_tc)
-    is_bad pred       = last_tv `elemVarSet` tyVarsOfPred pred
+    is_bad pred       = last_tv `elemVarSet` tyVarsOfType pred
 
     data_cons = tyConDataCons rep_tc
     check_con con = msum (check_vanilla con : foldDataConArgs (ft_check con) con)
@@ -1360,7 +1360,10 @@ inferInstanceContexts oflag infer_specs
 	     		  extendLocalInstEnv inst_specs $
 	     		  mapM gen_soln infer_specs
 
-	   ; if (current_solns == new_solns) then
+           ; let eqList :: (a -> b -> Bool) -> [a] -> [b] -> Bool
+                 eqList f xs ys = length xs == length ys && and (zipWith f xs ys)
+
+	   ; if (eqList (eqList eqType) current_solns new_solns) then
 		return [ spec { ds_theta = soln } 
                        | (spec, soln) <- zip infer_specs current_solns ]
 	     else
@@ -1381,7 +1384,7 @@ inferInstanceContexts oflag infer_specs
 		-- Claim: the result instance declaration is guaranteed valid
 		-- Hence no need to call:
 		--   checkValidInstance tyvars theta clas inst_tys
-	   ; return (sortLe (<=) theta) }	-- Canonicalise before returning the solution
+	   ; return (sortLe (\p1 p2 -> cmpType p1 p2 /= GT) theta) }	-- Canonicalise before returning the solution
       where
         the_pred = mkClassPred clas inst_tys
 

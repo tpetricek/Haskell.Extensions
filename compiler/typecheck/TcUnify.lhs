@@ -12,15 +12,19 @@ module TcUnify (
   checkConstraints, newImplication, sigCtxt,
 
         -- Various unifications
-  unifyType, unifyTypeList, unifyTheta, unifyKind, 
+  unifyType, unifyTypeWrap, unifyTypeList, unifyTheta, unifyKind, 
 
   --------------------------------
   -- Holes
-  tcInfer, 
-  matchExpectedListTy, matchExpectedPArrTy, 
-  matchExpectedTyConApp, matchExpectedAppTy, 
-  matchExpectedFunTys, matchExpectedFunKind,
-  wrapFunResCoercion, failWithMisMatch
+  tcInfer,
+  matchExpectedListTy, matchExpectedListTyWrap,
+  matchExpectedPArrTy, matchExpectedPArrTyWrap,
+  matchExpectedTyConApp, matchExpectedTyConAppWrap,
+  matchExpectedAppTy, 
+  matchExpectedFunTys, matchExpectedFunTysWrap,
+  matchExpectedFunKind,
+  wrapFunResCoercion,
+  failWithMisMatch
   ) where
 
 #include "HsVersions.h"
@@ -99,10 +103,19 @@ expected type, becuase it expects that to have been done already
 
 
 \begin{code}
+matchExpectedFunTysWrap :: SDoc
+                        -> Arity
+                        -> TcRhoType 
+                        -> TcM (HsCoWrapper, [TcSigmaType], TcRhoType)
+matchExpectedFunTysWrap herald arity orig_ty = do
+    (mk_co, sigmas, rho) <- matchExpectedFunTys herald arity orig_ty
+    made_co <- finaliseMk mk_co
+    return (made_co, sigmas, rho)
+
 matchExpectedFunTys :: SDoc 	-- See Note [Herald for matchExpectedFunTys]
             	    -> Arity
             	    -> TcRhoType 
-                    -> TcM (Coercion, [TcSigmaType], TcRhoType)
+                    -> TcM (Mk Coercion, [TcSigmaType], TcRhoType)
 
 -- If    matchExpectFunTys n ty = (co, [t1,..,tn], ty_r)
 -- then  co : ty ~ (t1 -> ... -> tn -> ty_r)
@@ -121,15 +134,15 @@ matchExpectedFunTys herald arity orig_ty
     -- then   co : ty ~ t1 -> .. -> tn -> ty_r
 
     go n_req ty
-      | n_req == 0 = return (mkReflCo ty, [], ty)
+      | n_req == 0 = return (returnMk (mkReflCo ty), [], ty)
 
     go n_req ty
       | Just ty' <- tcView ty = go n_req ty'
 
     go n_req (FunTy arg_ty res_ty)
       | not (isPredTy arg_ty)
-      = do { (coi, tys, ty_r) <- go (n_req-1) res_ty
-           ; return (mkFunCo (mkReflCo arg_ty) coi, arg_ty:tys, ty_r) }
+      = do { (mk_co, tys, ty_r) <- go (n_req-1) res_ty
+           ; return (fmapMk (mkFunCo (mkReflCo arg_ty)) mk_co, arg_ty:tys, ty_r) }
 
     go _ (TyConApp tc _)	      -- A common case
       | not (isSynFamilyTyCon tc)
@@ -151,8 +164,8 @@ matchExpectedFunTys herald arity orig_ty
       = addErrCtxtM mk_ctxt $
         do { arg_tys <- newFlexiTyVarTys n_req argTypeKind
            ; res_ty  <- newFlexiTyVarTy openTypeKind
-           ; coi     <- unifyType fun_ty (mkFunTys arg_tys res_ty)
-           ; return (coi, arg_tys, res_ty) }
+           ; mk_co   <- unifyType fun_ty (mkFunTys arg_tys res_ty)
+           ; return (mk_co, arg_tys, res_ty) }
 
     ------------
     mk_ctxt :: TidyEnv -> TcM (TidyEnv, Message)
@@ -172,23 +185,34 @@ matchExpectedFunTys herald arity orig_ty
 
 \begin{code}
 ----------------------
-matchExpectedListTy :: TcRhoType -> TcM (Coercion, TcRhoType)
+matchExpectedListTyWrap :: TcRhoType -> TcM (HsCoWrapper, TcRhoType)
+matchExpectedListTyWrap exp_ty = matchExpectedListTy exp_ty >>= firstM finaliseMk
+
+matchExpectedListTy :: TcRhoType -> TcM (Mk Coercion, TcRhoType)
 -- Special case for lists
 matchExpectedListTy exp_ty
- = do { (coi, [elt_ty]) <- matchExpectedTyConApp listTyCon exp_ty
-      ; return (coi, elt_ty) }
+ = do { (mk_co, [elt_ty]) <- matchExpectedTyConApp listTyCon exp_ty
+      ; return (mk_co, elt_ty) }
 
 ----------------------
-matchExpectedPArrTy :: TcRhoType -> TcM (Coercion, TcRhoType)
+matchExpectedPArrTyWrap :: TcRhoType -> TcM (HsCoWrapper, TcRhoType)
+matchExpectedPArrTyWrap exp_ty = matchExpectedPArrTy exp_ty >>= firstM finaliseMk
+
+matchExpectedPArrTy :: TcRhoType -> TcM (Mk Coercion, TcRhoType)
 -- Special case for parrs
 matchExpectedPArrTy exp_ty
-  = do { (coi, [elt_ty]) <- matchExpectedTyConApp parrTyCon exp_ty
-       ; return (coi, elt_ty) }
+  = do { (mk_co, [elt_ty]) <- matchExpectedTyConApp parrTyCon exp_ty
+       ; return (mk_co, elt_ty) }
 
 ----------------------
+matchExpectedTyConAppWrap
+  :: TyCon -> TcRhoType -> TcM (HsCoWrapper,
+                                [TcSigmaType])
+matchExpectedTyConAppWrap tc orig_ty = matchExpectedTyConApp tc orig_ty >>= firstM finaliseMk
+
 matchExpectedTyConApp :: TyCon                -- T :: k1 -> ... -> kn -> *
                       -> TcRhoType 	      -- orig_ty
-                      -> TcM (Coercion,      -- T a b c ~ orig_ty
+                      -> TcM (Mk Coercion,      -- T a b c ~ orig_ty
                               [TcSigmaType])  -- Element types, a b c
                               
 -- It's used for wired-in tycons, so we call checkWiredInTyCon
@@ -199,7 +223,7 @@ matchExpectedTyConApp tc orig_ty
   = do  { checkWiredInTyCon tc
         ; go (tyConArity tc) orig_ty [] }
   where
-    go :: Int -> TcRhoType -> [TcSigmaType] -> TcM (Coercion, [TcSigmaType])
+    go :: Int -> TcRhoType -> [TcSigmaType] -> TcM (Mk Coercion, [TcSigmaType])
     -- If     go n ty tys = (co, [t1..tn] ++ tys)
     -- then   co : T t1..tn ~ ty
 
@@ -216,26 +240,26 @@ matchExpectedTyConApp tc orig_ty
     go n_req ty@(TyConApp tycon args) tys
       | tc == tycon
       = ASSERT( n_req == length args)   -- ty::*
-        return (mkReflCo ty, args ++ tys)
+        return (returnMk (mkReflCo ty), args ++ tys)
 
     go n_req (AppTy fun arg) tys
       | n_req > 0
-      = do { (coi, args) <- go (n_req - 1) fun (arg : tys) 
-           ; return (mkAppCo coi (mkReflCo arg), args) }
+      = do { (mk_co, args) <- go (n_req - 1) fun (arg : tys) 
+           ; return (fmapMk (\co -> mkAppCo co (mkReflCo arg)) mk_co, args) }
 
     go n_req ty tys = defer n_req ty tys
 
     ----------
     defer n_req ty tys
       = do { tau_tys <- mapM newFlexiTyVarTy arg_kinds
-           ; coi <- unifyType (mkTyConApp tc tau_tys) ty
-           ; return (coi, tau_tys ++ tys) }
+           ; mk_co <- unifyType (mkTyConApp tc tau_tys) ty
+           ; return (mk_co, tau_tys ++ tys) }
       where
         (arg_kinds, _) = splitKindFunTysN n_req (tyConKind tc)
 
 ----------------------
 matchExpectedAppTy :: TcRhoType                         -- orig_ty
-                   -> TcM (Coercion,                   -- m a ~ orig_ty
+                   -> TcM (Mk Coercion,                   -- m a ~ orig_ty
                            (TcSigmaType, TcSigmaType))  -- Returns m, a
 -- If the incoming type is a mutable type variable of kind k, then
 -- matchExpectedAppTy returns a new type variable (m: * -> k); note the *.
@@ -247,7 +271,7 @@ matchExpectedAppTy orig_ty
       | Just ty' <- tcView ty = go ty'
 
       | Just (fun_ty, arg_ty) <- tcSplitAppTy_maybe ty
-      = return (mkReflCo orig_ty, (fun_ty, arg_ty))
+      = return (returnMk (mkReflCo orig_ty), (fun_ty, arg_ty))
 
     go (TyVarTy tv)
       | ASSERT( isTcTyVar tv) isMetaTyVar tv
@@ -261,8 +285,8 @@ matchExpectedAppTy orig_ty
     -- Defer splitting by generating an equality constraint
     defer = do { ty1 <- newFlexiTyVarTy kind1
                ; ty2 <- newFlexiTyVarTy kind2
-               ; coi <- unifyType (mkAppTy ty1 ty2) orig_ty
-               ; return (coi, (ty1, ty2)) }
+               ; mk_co <- unifyType (mkAppTy ty1 ty2) orig_ty
+               ; return (mk_co, (ty1, ty2)) }
 
     orig_kind = typeKind orig_ty
     kind1 = mkArrowKind liftedTypeKind (defaultKind orig_kind)
@@ -304,15 +328,15 @@ tcSubType origin ctxt ty_actual ty_expected
   = do { (sk_wrap, inst_wrap) 
             <- tcGen ctxt ty_expected $ \ _ sk_rho -> do
             { (in_wrap, in_rho) <- deeplyInstantiate origin ty_actual
-            ; coi <- unifyType in_rho sk_rho
-            ; return (coToHsWrapper coi <.> in_wrap) }
+            ; cow <- unifyTypeWrap in_rho sk_rho
+            ; return (coToHsWrapper cow <.> in_wrap) }
        ; return (sk_wrap <.> inst_wrap) }
 
   | otherwise	-- Urgh!  It seems deeply weird to have equality
     		-- when actual is not a polytype, and it makes a big 
 		-- difference e.g. tcfail104
-  = do { coi <- unifyType ty_actual ty_expected
-       ; return (coToHsWrapper coi) }
+  = do { cow <- unifyTypeWrap ty_actual ty_expected
+       ; return (coToHsWrapper cow) }
   
 tcInfer :: (TcType -> TcM a) -> TcM (a, TcType)
 tcInfer tc_infer = do { ty  <- newFlexiTyVarTy openTypeKind
@@ -322,9 +346,9 @@ tcInfer tc_infer = do { ty  <- newFlexiTyVarTy openTypeKind
 -----------------
 tcWrapResult :: HsExpr TcId -> TcRhoType -> TcRhoType -> TcM (HsExpr TcId)
 tcWrapResult expr actual_ty res_ty
-  = do { coi <- unifyType actual_ty res_ty
+  = do { cow <- unifyTypeWrap actual_ty res_ty
        	        -- Both types are deeply skolemised
-       ; return (mkHsWrapCo coi expr) }
+       ; return (mkHsWrapCo cow expr) }
 
 -----------------------------------
 wrapFunResCoercion
@@ -449,25 +473,28 @@ The exported functions are all defined as versions of some
 non-exported generic functions.
 
 \begin{code}
+unifyTypeWrap :: TcTauType -> TcTauType -> TcM HsCoWrapper
+unifyTypeWrap ty1 ty2 = unifyType ty1 ty2 >>= finaliseMk
+
 ---------------
-unifyType :: TcTauType -> TcTauType -> TcM Coercion
+unifyType :: TcTauType -> TcTauType -> TcM (Mk Coercion)
 -- Actual and expected types
 -- Returns a coercion : ty1 ~ ty2
 unifyType ty1 ty2 = uType [] ty1 ty2
 
 ---------------
-unifyPred :: PredType -> PredType -> TcM Coercion
+unifyPred :: PredType -> PredType -> TcM (Mk Coercion)
 -- Actual and expected types
 unifyPred = unifyType
 
 ---------------
-unifyTheta :: TcThetaType -> TcThetaType -> TcM [Coercion]
+unifyTheta :: TcThetaType -> TcThetaType -> TcM (Mk [Coercion])
 -- Actual and expected types
 unifyTheta theta1 theta2
   = do  { checkTc (equalLength theta1 theta2)
                   (vcat [ptext (sLit "Contexts differ in length"),
                          nest 2 $ parens $ ptext (sLit "Use -XRelaxedPolyRec to allow this")])
-        ; zipWithM unifyPred theta1 theta2 }
+        ; liftM joinMks $ zipWithM unifyPred theta1 theta2 }
 \end{code}
 
 @unifyTypeList@ takes a single list of @TauType@s and unifies them
@@ -512,23 +539,23 @@ uType, uType_np, uType_defer
   :: [EqOrigin]
   -> TcType    -- ty1 is the *actual* type
   -> TcType    -- ty2 is the *expected* type
-  -> TcM Coercion
+  -> TcM (Mk Coercion)
 
 --------------
 -- It is always safe to defer unification to the main constraint solver
 -- See Note [Deferred unification]
 uType_defer (item : origin) ty1 ty2
   = wrapEqCtxt origin $
-    do { co_var <- newCoVar ty1 ty2
+    do { eqv <- newEq ty1 ty2
        ; loc <- getCtLoc (TypeEqOrigin item)
-       ; emitFlat (mkEvVarX co_var loc)
+       ; emitFlat (mkEvVarX eqv loc)
 
        -- Error trace only
        ; ctxt <- getErrCtxt
        ; doc <- mkErrInfo emptyTidyEnv ctxt
-       ; traceTc "utype_defer" (vcat [ppr co_var, ppr ty1, ppr ty2, ppr origin, doc])
+       ; traceTc "utype_defer" (vcat [ppr eqv, ppr ty1, ppr ty2, ppr origin, doc])
 
-       ; return $ mkCoVarCo co_var }
+       ; return (mkEqVarCo eqv) }
 uType_defer [] _ _
   = panic "uType_defer"
 
@@ -543,16 +570,16 @@ uType_np origin orig_ty1 orig_ty2
   = do { traceTc "u_tys " $ vcat 
               [ sep [ ppr orig_ty1, text "~", ppr orig_ty2]
               , ppr origin]
-       ; coi <- go orig_ty1 orig_ty2
-       ; if isReflCo coi
+       ; mk_co <- go orig_ty1 orig_ty2
+       ; if isReflMkCo mk_co
             then traceTc "u_tys yields no coercion" empty
-            else traceTc "u_tys yields coercion:" (ppr coi)
-       ; return coi }
+            else traceTc "u_tys yields coercion:" (ppr mk_co)
+       ; return mk_co }
   where
     bale_out :: [EqOrigin] -> TcM a
     bale_out origin = failWithMisMatch origin
 
-    go :: TcType -> TcType -> TcM Coercion
+    go :: TcType -> TcType -> TcM (Mk Coercion)
 	-- The arguments to 'go' are always semantically identical 
 	-- to orig_ty{1,2} except for looking through type synonyms
 
@@ -580,9 +607,9 @@ uType_np origin orig_ty1 orig_ty2
       	     
         -- Functions (or predicate functions) just check the two parts
     go (FunTy fun1 arg1) (FunTy fun2 arg2)
-      = do { coi_l <- uType origin fun1 fun2
-           ; coi_r <- uType origin arg1 arg2
-           ; return $ mkFunCo coi_l coi_r }
+      = do { mk_co_l <- uType origin fun1 fun2
+           ; mk_co_r <- uType origin arg1 arg2
+           ; return $ joinMk mkFunCo mk_co_l mk_co_r }
 
         -- Always defer if a type synonym family (type function)
       	-- is involved.  (Data families behave rigidly.)
@@ -593,21 +620,21 @@ uType_np origin orig_ty1 orig_ty2
 
     go (TyConApp tc1 tys1) (TyConApp tc2 tys2)
       | tc1 == tc2	   -- See Note [TyCon app]
-      = do { cois <- uList origin uType tys1 tys2
-           ; return $ mkTyConAppCo tc1 cois }
+      = do { mk_cos <- uList origin uType tys1 tys2
+           ; return $ fmapMk (mkTyConAppCo tc1) mk_cos }
      
 	-- See Note [Care with type applications]
     go (AppTy s1 t1) ty2
       | Just (s2,t2) <- tcSplitAppTy_maybe ty2
-      = do { coi_s <- uType_np origin s1 s2  -- See Note [Unifying AppTy]
-           ; coi_t <- uType origin t1 t2        
-           ; return $ mkAppCo coi_s coi_t }
+      = do { mk_co_s <- uType_np origin s1 s2  -- See Note [Unifying AppTy]
+           ; mk_co_t <- uType origin t1 t2        
+           ; return $ joinMk mkAppCo mk_co_s mk_co_t }
 
     go ty1 (AppTy s2 t2)
       | Just (s1,t1) <- tcSplitAppTy_maybe ty1
-      = do { coi_s <- uType_np origin s1 s2
-           ; coi_t <- uType origin t1 t2
-           ; return $ mkAppCo coi_s coi_t }
+      = do { mk_co_s <- uType_np origin s1 s2
+           ; mk_co_t <- uType origin t1 t2
+           ; return $ joinMk mkAppCo mk_co_s mk_co_t }
 
     go ty1 ty2
       | tcIsForAllTy ty1 || tcIsForAllTy ty2 
@@ -616,7 +643,7 @@ uType_np origin orig_ty1 orig_ty2
         -- Anything else fails
     go _ _ = bale_out origin
 
-unifySigmaTy :: [EqOrigin] -> TcType -> TcType -> TcM Coercion
+unifySigmaTy :: [EqOrigin] -> TcType -> TcType -> TcM (Mk Coercion)
 unifySigmaTy origin ty1 ty2
   = do { let (tvs1, body1) = tcSplitForAllTys ty1
              (tvs2, body2) = tcSplitForAllTys ty2
@@ -628,9 +655,9 @@ unifySigmaTy origin ty1 ty2
              phi1     = Type.substTy (mkTvSubst in_scope (zipTyEnv tvs1 tys)) body1
              phi2     = Type.substTy (mkTvSubst in_scope (zipTyEnv tvs2 tys)) body2
 
-       ; ((coi, _untch), lie) <- captureConstraints $ 
-                                 captureUntouchables $ 
-                       		 uType origin phi1 phi2
+       ; ((mk_coi, _untch), lie) <- captureConstraints $ 
+                                    captureUntouchables $ 
+                                    uType origin phi1 phi2
           -- Check for escape; e.g. (forall a. a->b) ~ (forall a. a->a)
           -- VERY UNSATISFACTORY; the constraint might be fine, but
 	  -- we fail eagerly because we don't have any place to put 
@@ -641,19 +668,19 @@ unifySigmaTy origin ty1 ty2
               (failWithMisMatch origin)	-- ToDo: give details from bad_lie
 
        ; emitConstraints lie
-       ; return (foldr mkForAllCo coi skol_tvs) }
+       ; return (fmapMk (\coi -> foldr mkForAllCo coi skol_tvs) mk_coi) }
 
 ---------------
 uList :: [EqOrigin] 
-      -> ([EqOrigin] -> a -> a -> TcM b)
-      -> [a] -> [a] -> TcM [b]
+      -> ([EqOrigin] -> a -> a -> TcM (Mk b))
+      -> [a] -> [a] -> TcM (Mk [b])
 -- Unify corresponding elements of two lists of types, which
 -- should be of equal length.  We charge down the list explicitly so that
 -- we can complain if their lengths differ.
-uList _       _     []         []        = return []
-uList origin unify (ty1:tys1) (ty2:tys2) = do { x  <- unify origin ty1 ty2;
-                                              ; xs <- uList origin unify tys1 tys2
-                                              ; return (x:xs) }
+uList _       _     []         []        = return (returnMk [])
+uList origin unify (ty1:tys1) (ty2:tys2) = do { mk_x  <- unify origin ty1 ty2;
+                                              ; mk_xs <- uList origin unify tys1 tys2
+                                              ; return (joinMk (:) mk_x mk_xs) }
 uList origin _ _ _ = failWithMisMatch origin
        -- See Note [Mismatched type lists and application decomposition]
 
@@ -783,7 +810,7 @@ of the substitution; rather, notice that @uVar@ (defined below) nips
 back into @uTys@ if it turns out that the variable is already bound.
 
 \begin{code}
-uVar :: [EqOrigin] -> SwapFlag -> TcTyVar -> TcTauType -> TcM Coercion
+uVar :: [EqOrigin] -> SwapFlag -> TcTyVar -> TcTauType -> TcM (Mk Coercion)
 uVar origin swapped tv1 ty2
   = do  { traceTc "uVar" (vcat [ ppr origin
                                 , ppr swapped
@@ -801,13 +828,13 @@ uUnfilledVar :: [EqOrigin]
              -> SwapFlag
              -> TcTyVar -> TcTyVarDetails       -- Tyvar 1
              -> TcTauType  			-- Type 2
-             -> TcM Coercion
+             -> TcM (Mk Coercion)
 -- "Unfilled" means that the variable is definitely not a filled-in meta tyvar
 --            It might be a skolem, or untouchable, or meta
 
 uUnfilledVar origin swapped tv1 details1 (TyVarTy tv2)
   | tv1 == tv2  -- Same type variable => no-op
-  = return (mkReflCo (mkTyVarTy tv1))
+  = return (returnMk (mkReflCo (mkTyVarTy tv1)))
 
   | otherwise  -- Distinct type variables
   = do  { lookup2 <- lookupTcTyVar tv2
@@ -841,7 +868,7 @@ uUnfilledVars :: [EqOrigin]
               -> SwapFlag
               -> TcTyVar -> TcTyVarDetails      -- Tyvar 1
               -> TcTyVar -> TcTyVarDetails      -- Tyvar 2
-              -> TcM Coercion
+              -> TcM (Mk Coercion)
 -- Invarant: The type variables are distinct,
 --           Neither is filled in yet
 
@@ -1009,10 +1036,10 @@ lookupTcTyVar tyvar
     details = ASSERT2( isTcTyVar tyvar, ppr tyvar )
               tcTyVarDetails tyvar
 
-updateMeta :: TcTyVar -> TcRef MetaDetails -> TcType -> TcM Coercion
+updateMeta :: TcTyVar -> TcRef MetaDetails -> TcType -> TcM (Mk Coercion)
 updateMeta tv1 ref1 ty2
   = do { writeMetaTyVarRef tv1 ref1 ty2
-       ; return (mkReflCo ty2) }
+       ; return (returnMk (mkReflCo ty2)) }
 \end{code}
 
 Note [Unifying untouchables]

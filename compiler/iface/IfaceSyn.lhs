@@ -40,6 +40,7 @@ import BasicTypes
 import Outputable
 import FastString
 import Module
+import TysWiredIn ( eqTyConName )
 
 infixl 3 &&&
 \end{code}
@@ -478,6 +479,9 @@ pp_condecls _  IfOpenDataTyCon  = empty
 pp_condecls tc (IfDataTyCon cs) = equals <+> sep (punctuate (ptext (sLit " |"))
                                                             (map (pprIfaceConDecl tc) cs))
 
+mkIfaceEqPred :: IfaceType -> IfaceType -> IfacePredType
+mkIfaceEqPred ty1 ty2 = IfaceTyConApp (IfaceTc eqTyConName) [ty1, ty2]
+
 pprIfaceConDecl :: OccName -> IfaceConDecl -> SDoc
 pprIfaceConDecl tc
         (IfCon { ifConOcc = name, ifConInfix = is_infix, ifConWrapper = has_wrap,
@@ -498,7 +502,7 @@ pprIfaceConDecl tc
     main_payload = ppr name <+> dcolon <+>
                    pprIfaceForAllPart (univ_tvs ++ ex_tvs) (eq_ctxt ++ ctxt) pp_tau
 
-    eq_ctxt = [(IfaceEqPred (IfaceTyVar (occNameFS tv)) ty)
+    eq_ctxt = [(mkIfaceEqPred (IfaceTyVar (occNameFS tv)) ty)
               | (tv,ty) <- eq_spec]
 
         -- A bit gruesome this, but we can't form the full con_tau, and ppr it,

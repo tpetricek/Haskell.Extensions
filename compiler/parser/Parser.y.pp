@@ -34,7 +34,7 @@ import Lexer
 import RdrName
 import TysWiredIn	( unitTyCon, unitDataCon, tupleTyCon, tupleCon, nilDataCon,
 			  unboxedSingletonTyCon, unboxedSingletonDataCon,
-			  listTyCon_RDR, parrTyCon_RDR, consDataCon_RDR )
+			  listTyCon_RDR, parrTyCon_RDR, consDataCon_RDR, eqTyCon_RDR )
 import Type		( funTyCon )
 import ForeignCall	( Safety(..), CExportSpec(..), CLabelString,
 			  CCallConv(..), CCallTarget(..), defaultCCallConv
@@ -1736,6 +1736,7 @@ gtycon 	:: { Located RdrName }	-- A "general" qualified tycon
 	| '(#' commas '#)'		{ LL $ getRdrName (tupleTyCon Unboxed ($2 + 1)) }
 	| '(' '->' ')'			{ LL $ getRdrName funTyCon }
 	| '[' ']'			{ LL $ listTyCon_RDR }
+	| '(' '~' ')'			{ LL $ eqTyCon_RDR }
 	| '[:' ':]'			{ LL $ parrTyCon_RDR }
 
 oqtycon :: { Located RdrName }	-- An "ordinary" qualified tycon

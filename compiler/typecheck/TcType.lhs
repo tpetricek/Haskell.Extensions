@@ -68,9 +68,10 @@ module TcType (
 
   ---------------------------------
   -- Predicate types  
-  PredTree(..), predTreePredType, predTypePredTree,
   mkMinimalBySCs, transSuperClasses, immSuperClasses,
   getClassPredTys, getClassPredTys_maybe,
+  getEqPredTys, getEqPredTys_maybe,
+  getIPPredTy_maybe,
 
   -- * Finding type instances
   tcTyFamInsts,
@@ -83,7 +84,7 @@ module TcType (
   tidyOpenType,  tidyOpenTypes,
   tidyTyVarBndr, tidyFreeTyVars,
   tidyOpenTyVar, tidyOpenTyVars,
-  tidyTopType,   tidyPred,
+  tidyTopType,
   tidyKind, 
   tidyCo, tidyCos,
 
@@ -121,8 +122,8 @@ module TcType (
   mkTyConApp, mkAppTy, mkAppTys, applyTy, applyTys,
   mkTyVarTy, mkTyVarTys, mkTyConTy,
 
-  isClassPred, isEqPred, isIPPred, isIrredPred,
-  mkClassPred, mkIPPred, mkDictTy,
+  isClassPred, isEqPred, isIPPred,
+  mkClassPred, mkIPPred,
   isDictLikeTy,
   tcSplitDFunTy, tcSplitDFunHead, 
   mkEqPred,
@@ -141,12 +142,12 @@ module TcType (
   isUnboxedTupleType,	-- Ditto
   isPrimitiveType, 
 
-  tyVarsOfType, tyVarsOfTypes, tyVarsOfPred, tyVarsOfTheta,
-  tcTyVarsOfType, tcTyVarsOfTypes, tcTyVarsOfPred,
+  tyVarsOfType, tyVarsOfTypes,
+  tcTyVarsOfType, tcTyVarsOfTypes,
 
   pprKind, pprParendKind,
   pprType, pprParendType, pprTypeApp, pprTyThingCategory,
-  pprPred, pprTheta, pprThetaArrow, pprThetaArrowTy, pprClassPred
+  pprTheta, pprThetaArrowTy, pprClassPred
 
   ) where
 
@@ -764,8 +765,6 @@ getDFunTyKey (TyConApp tc _) = getOccName tc
 getDFunTyKey (AppTy fun _)   = getDFunTyKey fun
 getDFunTyKey (FunTy _ _)     = getOccName funTyCon
 getDFunTyKey (ForAllTy _ t)  = getDFunTyKey t
-getDFunTyKey ty		     = pprPanic "getDFunTyKey" (pprType ty)
--- PredTy shouldn't happen
 \end{code}
 
 
@@ -953,7 +952,7 @@ tcSplitDFunTy ty
     split_dfun_args n ty               = (n, ty)
 
 tcSplitDFunHead :: Type -> (Class, [Type])
-tcSplitDFunHead tau = getClassPredTys
+tcSplitDFunHead = getClassPredTys
 
 tcInstHeadTyNotSynonym :: Type -> Bool
 -- Used in Haskell-98 mode, for the argument types of an instance head
@@ -994,64 +993,52 @@ tcInstHeadTyAppAllTyVars ty
 %*									*
 %************************************************************************
 
-Decomposing PredType
-
-\begin{code}
-data PredTree = ClassPred Class [Type]
-              | EqPred Type Type
-              | IPPred (IPName Name) Type
-              | TuplePred [PredTree]
-              | IrredPred PredType
-
-predTreePredType :: PredTree -> PredType
-predTreePredType (ClassPred clas tys) = mkClassPred clas tys
-predTreePredType (EqPred ty1 ty2)     = mkEqPred ty1 ty2
-predTreePredType (IPPred ip ty)       = mkIPPred ip ty
-predTreePredType (TuplePred tys)      = mkTupleTy (map predTreePredType tys)
-predTreePredType (IrredPred ty)       = ty
-
-predTypePredTree :: PredType -> PredTree
-predTypePredTree ev_ty = case splitTyConApp_maybe ev_ty of
-    Just (tc, tys) | Just clas <- tyConClass_maybe tc
-                   -> ClassPred clas tys
-    Just (tc, tys) | tc `hasKey` eqTyConKey
-                   , let [ty1, ty2] = tys
-                   -> EqPred ty1 ty2
-    Just (tc, tys) | Just ip <- tyConIP_maybe tc
-                   , let [ty] = tys
-                   -> IPPred ip ty
-    Just (tc, tys) | isTupleTyCon tc
-                   -> TuplePred (map predTypePredTree tys)
-    _ -> IrredPred ev_ty
-\end{code}
-
 Deconstructors and tests on predicate types
 
 \begin{code}
 isTyVarClassPred :: PredType -> Bool
-isTyVarClassPred ty = case getClassPredTys_maybe of
+isTyVarClassPred ty = case getClassPredTys_maybe ty of
     Just (_, tys) -> all isTyVarTy tys
     _             -> False
-
-getClassPredTys_maybe :: PredType -> Maybe (Class, [Type])
-getClassPredTys_maybe ty = case tcSplitTyConApp_maybe ty of 
-        Just (tc, tys) | Just clas <- tyConClass_maybe -> Just (clas, tys)
-        _ -> Nothing
 
 getClassPredTys :: PredType -> (Class, [Type])
 getClassPredTys ty = case getClassPredTys_maybe ty of
         Just (clas, tys) -> (clas, tys)
         Nothing          -> pprPanic "getClassPredTys" (ppr ty)
 
+getClassPredTys_maybe :: PredType -> Maybe (Class, [Type])
+getClassPredTys_maybe ty = case tcSplitTyConApp_maybe ty of 
+        Just (tc, tys) | Just clas <- tyConClass_maybe tc -> Just (clas, tys)
+        _ -> Nothing
+
+getEqPredTys :: PredType -> (Type, Type)
+getEqPredTys ty = case getEqPredTys_maybe ty of
+        Just (ty1, ty2) -> (ty1, ty2)
+        Nothing         -> pprPanic "getEqPredTys" (ppr ty)
+
+getEqPredTys_maybe :: PredType -> Maybe (Type, Type)
+getEqPredTys_maybe ty = case tcSplitTyConApp_maybe ty of 
+        Just (tc, [ty1, ty2]) | tc `hasKey` eqTyConKey -> Just (ty1, ty2)
+        _ -> Nothing
+
+getIPPredTy_maybe :: PredType -> Maybe Type
+getIPPredTy_maybe ty = case tcSplitTyConApp_maybe ty of 
+        Just (tc, [ty1]) | Just _ <- tyConIP_maybe tc -> Just ty1
+        _ -> Nothing
+
 evVarPred_maybe :: EvVar -> Maybe PredType
 evVarPred_maybe v = if isPredTy ty then Just ty else Nothing
   where ty = varType v
 
 evVarPred :: EvVar -> PredType
+#ifdef DEBUG
 evVarPred var
   = case evVarPred_maybe var of
       Just pred -> pred
       Nothing   -> pprPanic "tcEvVarPred" (ppr var <+> ppr (varType var))
+#else
+evVarPred = varType
+#endif
 \end{code}
 
 Superclasses
@@ -1072,9 +1059,10 @@ transSuperClasses :: Class -> [Type] -> [PredType]
 transSuperClasses cls tys
   = foldl (\pts p -> trans_sc p ++ pts) [] $
     immSuperClasses cls tys
-  where trans_sc :: PredTree -> [PredType]
+  where trans_sc :: PredType -> [PredType]
         trans_sc = trans_sc' . predTypePredTree
 
+        trans_sc' :: PredTree -> [PredType]
         trans_sc' ptree@(ClassPred cls tys)
           = foldl (\pts p -> trans_sc p ++ pts) [predTreePredType ptree] $
             immSuperClasses cls tys
@@ -1185,7 +1173,7 @@ end of the compiler.
 
 \begin{code}
 orphNamesOfTyCon :: TyCon -> NameSet
-orphNamesOfTyCon tycon = unitNameSet (getName tycon) `unionNameSets` case tyConClass_maybe of
+orphNamesOfTyCon tycon = unitNameSet (getName tycon) `unionNameSets` case tyConClass_maybe tycon of
     Nothing  -> emptyNameSet
     Just cls -> unitNameSet (getName cls)
 

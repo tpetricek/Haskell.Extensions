@@ -9,7 +9,7 @@ This module defines interface types and binders
 module IfaceType (
 	IfExtName, IfLclName,
 
-        IfaceType(..), IfaceKind, IfaceTyCon(..), IfaceCoCon(..),
+        IfaceType(..), IfacePredType, IfaceKind, IfaceTyCon(..), IfaceCoCon(..),
 	IfaceContext, IfaceBndr(..), IfaceTvBndr, IfaceIdBndr, IfaceCoercion,
 	ifaceTyConName,
 
@@ -22,7 +22,7 @@ module IfaceType (
         coToIfaceType,
 
 	-- Printing
-	pprIfaceType, pprParendIfaceType, pprIfaceContext, 
+	pprIfaceType, pprParendIfaceType, pprIfaceContext,
 	pprIfaceIdBndr, pprIfaceTvBndr, pprIfaceTvBndrs, pprIfaceBndrs,
 	tOP_PREC, tYCON_PREC, noParens, maybeParen, pprIfaceForAllPart
 
@@ -73,7 +73,8 @@ data IfaceType	   -- A kind of universal type, used for types, kinds, and coerci
 					  -- Includes newtypes, synonyms, tuples
   | IfaceCoConApp IfaceCoCon [IfaceType]  -- Always saturated
 
-type IfaceContext = [IfaceType]
+type IfacePredType = IfaceType
+type IfaceContext = [IfacePredType]
 
 data IfaceTyCon 	-- Encodes type consructors, kind constructors
      			-- coercion constructors, the lot
@@ -131,16 +132,21 @@ than solve this potential problem now, I'm going to defer it until it happens!
 
 
 \begin{code}
-splitIfaceSigmaTy :: IfaceType -> ([IfaceTvBndr], IfaceType)
+splitIfaceSigmaTy :: IfaceType -> ([IfaceTvBndr], [IfacePredType], IfaceType)
 -- Mainly for printing purposes
 splitIfaceSigmaTy ty
-  = (tvs, rho)
+  = (tvs, theta, tau)
   where
-    (tvs, rho)   = split_foralls ty
+    (tvs,   rho)   = split_foralls ty
+    (theta, tau)   = split_rho rho
 
     split_foralls (IfaceForAllTy tv ty) 
 	= case split_foralls ty of { (tvs, rho) -> (tv:tvs, rho) }
     split_foralls rho = ([], rho)
+
+    split_rho (IfaceFunTy ty1 ty2)
+      | isIfacePredTy ty1 = case split_rho ty2 of { (ps, tau) -> (ty1:ps, tau) }
+    split_rho tau = ([], tau)
 \end{code}
 
 %************************************************************************
@@ -207,6 +213,10 @@ pprIfaceType, pprParendIfaceType ::IfaceType -> SDoc
 pprIfaceType       = ppr_ty tOP_PREC
 pprParendIfaceType = ppr_ty tYCON_PREC
 
+isIfacePredTy :: IfaceType -> Bool
+isIfacePredTy _  = False
+-- FIXME: fix this to print iface pred tys correctly
+-- isIfacePredTy ty = ifaceTypeKind ty `eqKind` factKind
 
 ppr_ty :: Int -> IfaceType -> SDoc
 ppr_ty _         (IfaceTyVar tyvar)     = ppr tyvar
@@ -222,8 +232,8 @@ ppr_ty ctxt_prec (IfaceFunTy ty1 ty2)
     maybeParen ctxt_prec fUN_PREC $
     sep (ppr_ty fUN_PREC ty1 : ppr_fun_tail ty2)
   where
-    arr | ifaceTypeKind ty1 `eqKind` factKind = darrow
-        | otherwise                           = arrow
+    arr | isIfacePredTy ty1 = darrow
+        | otherwise         = arrow
 
     ppr_fun_tail (IfaceFunTy ty1 ty2) 
       = (arr <+> ppr_ty fUN_PREC ty1) : ppr_fun_tail ty2
@@ -235,17 +245,17 @@ ppr_ty ctxt_prec (IfaceAppTy ty1 ty2)
     ppr_ty fUN_PREC ty1 <+> pprParendIfaceType ty2
 
 ppr_ty ctxt_prec ty@(IfaceForAllTy _ _)
-  = maybeParen ctxt_prec fUN_PREC (pprIfaceForAllPart tvs (pprIfaceType tau))
+  = maybeParen ctxt_prec fUN_PREC (pprIfaceForAllPart tvs theta (pprIfaceType tau))
  where		
-    (tvs, tau) = splitIfaceSigmaTy ty
-    
--------------------
-pprIfaceForAllPart :: [IfaceTvBndr] -> SDoc -> SDoc
-pprIfaceForAllPart tvs doc 
-  = sep [ppr_tvs, doc]
+    (tvs, theta, tau) = splitIfaceSigmaTy ty
+     
+ -------------------
+pprIfaceForAllPart :: [IfaceTvBndr] -> IfaceContext -> SDoc -> SDoc
+pprIfaceForAllPart tvs ctxt doc 
+  = sep [ppr_tvs, pprIfaceContext ctxt, doc]
   where
     ppr_tvs | null tvs  = empty
-	    | otherwise = ptext (sLit "forall") <+> pprIfaceTvBndrs tvs <> dot
+            | otherwise = ptext (sLit "forall") <+> pprIfaceTvBndrs tvs <> dot
 
 -------------------
 ppr_tc_app :: Int -> IfaceTyCon -> [IfaceType] -> SDoc
@@ -280,6 +290,16 @@ instance Outputable IfaceCoCon where
   ppr IfaceTransCo   = ptext (sLit "Trans")
   ppr IfaceInstCo    = ptext (sLit "Inst")
   ppr (IfaceNthCo d) = ptext (sLit "Nth:") <> int d
+
+-------------------
+pprIfaceContext :: IfaceContext -> SDoc
+-- Prints "(C a, D b) =>", including the arrow
+pprIfaceContext []    = empty
+pprIfaceContext theta = ppr_preds theta <+> darrow
+
+ppr_preds :: [IfacePredType] -> SDoc
+ppr_preds [pred] = ppr pred    -- No parens
+ppr_preds preds  = parens (sep (punctuate comma (map ppr preds))) 
 
 -------------------
 pabrackets :: SDoc -> SDoc
@@ -367,7 +387,7 @@ toIfaceTypes ts = map toIfaceType ts
 
 ----------------
 toIfaceContext :: ThetaType -> IfaceContext
-toIfaceContext cs = map (toIfacePred toIfaceType) cs
+toIfaceContext = toIfaceTypes
 
 ----------------
 coToIfaceType :: Coercion -> IfaceType

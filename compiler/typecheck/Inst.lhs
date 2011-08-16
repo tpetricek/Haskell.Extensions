@@ -43,13 +43,14 @@ import TcEnv
 import InstEnv
 import FunDeps
 import TcMType
+import Type
 import TcType
 import Class
 import Unify
 import HscTypes
 import Id
 import Name
-import Var      ( Var, TyVar, EvVar, varType, setVarType )
+import Var      ( Var, EvVar, varType, setVarType )
 import VarEnv
 import VarSet
 import PrelNames
@@ -209,16 +210,18 @@ instCallConstraints :: CtOrigin -> TcThetaType -> TcM HsWrapper
 
 instCallConstraints _ [] = return idHsWrapper
 
-instCallConstraints origin (EqPred ty1 ty2 : preds)	-- Try short-cut
-  = do  { traceTc "instCallConstraints" $ ppr (EqPred ty1 ty2)
-        ; co    <- unifyType ty1 ty2
-	; co_fn <- instCallConstraints origin preds
-        ; return (co_fn <.> WpEvApp (EvCoercion co)) }
-
 instCallConstraints origin (pred : preds)
+  | Just (ty1, ty2) <- getEqPredTys_maybe pred -- Try short-cut
+  = do  { traceTc "instCallConstraints" $ ppr (mkEqPred (ty1, ty2))
+        ; mk_co <- unifyType ty1 ty2
+        ; made_ev <- finaliseMk (fmap EvCoercionBox mk_co)
+	; co_fn <- instCallConstraints origin preds
+        ; return (co_fn <.> WpEvApp made_ev) }
+
+  | otherwise
   = do	{ ev_var <- emitWanted origin pred
 	; co_fn <- instCallConstraints origin preds
-	; return (co_fn <.> WpEvApp (EvId ev_var)) }
+	; return (co_fn <.> WpEvApp ([], EvId ev_var)) }
 
 ----------------
 instStupidTheta :: CtOrigin -> TcThetaType -> TcM ()
@@ -485,13 +488,13 @@ hasEqualities :: [EvVar] -> Bool
 -- Has a bunch of canonical constraints (all givens) got any equalities in it?
 hasEqualities givens = any (has_eq . evVarPred) givens
   where
-    has_eq = has_eq' . predTypeTree
+    has_eq = has_eq' . predTypePredTree
 
     has_eq' (EqPred {})          = True
     has_eq' (IPPred {})          = False
     has_eq' (ClassPred cls _tys) = any has_eq (classSCTheta cls)
     has_eq' (TuplePred ts)       = any has_eq' ts
-    has_eq' (IrredPred ty)       = True -- Might have equalities in it after reduction?
+    has_eq' (IrredPred _)        = True -- Might have equalities in it after reduction?
 
 ---------------- Getting free tyvars -------------------------
 tyVarsOfWC :: WantedConstraints -> TyVarSet
@@ -511,7 +514,7 @@ tyVarsOfEvVarXs :: Bag (EvVarX a) -> TyVarSet
 tyVarsOfEvVarXs = tyVarsOfBag tyVarsOfEvVarX
 
 tyVarsOfEvVar :: EvVar -> TyVarSet
-tyVarsOfEvVar ev = tyVarsOfPred $ evVarPred ev
+tyVarsOfEvVar ev = tyVarsOfType $ evVarPred ev
 
 tyVarsOfEvVars :: [EvVar] -> TyVarSet
 tyVarsOfEvVars = foldr (unionVarSet . tyVarsOfEvVar) emptyVarSet

@@ -838,7 +838,7 @@ tcInstDecl2 (InstInfo { iSpec = ispec, iBinds = ibinds })
                                 op_items ibinds
 
        -- Create the result bindings
-       ; self_dict <- newDictVar clas inst_tys
+       ; self_dict <- newDict clas inst_tys
        ; let class_tc      = classTyCon clas
              [dict_constr] = tyConDataCons class_tc
              dict_bind     = mkVarBind self_dict (L loc con_app_args)
@@ -854,7 +854,7 @@ tcInstDecl2 (InstInfo { iSpec = ispec, iBinds = ibinds })
                      --    con_app_args = MkD ty1 ty2 sc1 sc2 op1 op2
              con_app_tys  = wrapId (mkWpTyApps inst_tys)
                                    (dataConWrapId dict_constr)
-             con_app_scs  = mkHsWrap (mkWpEvApps (map mk_sc_ev_term sc_args)) con_app_tys
+             con_app_scs  = mkHsWrap (mkWpEvApps (map (\sc -> ([], mk_sc_ev_term sc)) sc_args)) con_app_tys
              con_app_args = foldl mk_app con_app_scs $
                             map (wrapId arg_wrapper) meth_ids
 
@@ -864,7 +864,7 @@ tcInstDecl2 (InstInfo { iSpec = ispec, iBinds = ibinds })
              mk_sc_ev_term :: EvVar -> EvTerm
              mk_sc_ev_term sc
                | null inst_tv_tys
-               , null dfun_ev_vars = evVarTerm sc
+               , null dfun_ev_vars = EvId sc
                | otherwise         = EvDFunApp sc inst_tv_tys dfun_ev_vars
 
              inst_tv_tys    = mkTyVarTys inst_tyvars
@@ -1103,9 +1103,9 @@ tcInstanceMethods dfun_id clas tyvars dfun_ev_vars inst_tys
                  -- The 'let' is necessary only because HsSyn doesn't allow
                  -- you to apply a function to a dictionary *expression*.
 
-           ; self_dict <- newDictVar clas inst_tys
-           ; let self_ev_bind = EvBind self_dict $
-                                EvDFunApp dfun_id (mkTyVarTys tyvars) dfun_ev_vars
+           ; self_dict <- newDict clas inst_tys
+           ; let self_ev_bind = EvBind self_dict
+                                ([], EvDFunApp dfun_id (mkTyVarTys tyvars) dfun_ev_vars)
 
            ; (meth_id, local_meth_id) <- mkMethIds clas tyvars dfun_ev_vars
                                                    inst_tys sel_id
@@ -1226,9 +1226,9 @@ tcInstanceMethods dfun_id clas tyvars dfun_ev_vars inst_tys
      ----------------
      mk_op_wrapper :: Id -> EvVar -> HsWrapper
      mk_op_wrapper sel_id rep_d
-       = WpCast (liftCoSubstWith sel_tvs (map mkReflCo init_inst_tys ++ [co])
-                               local_meth_ty)
-         <.> WpEvApp (EvId rep_d)
+       = WpCast ([], liftCoSubstWith sel_tvs (map mkReflCo init_inst_tys ++ [co])
+                                     local_meth_ty)
+         <.> WpEvApp ([], EvId rep_d)
          <.> mkWpTyApps (init_inst_tys ++ [rep_ty])
        where
          (sel_tvs, sel_rho) = tcSplitForAllTys (idType sel_id)

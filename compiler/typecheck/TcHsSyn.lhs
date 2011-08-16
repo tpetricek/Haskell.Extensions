@@ -679,11 +679,12 @@ zonkCoFn env WpHole   = return (env, WpHole)
 zonkCoFn env (WpCompose c1 c2) = do { (env1, c1') <- zonkCoFn env c1
 				    ; (env2, c2') <- zonkCoFn env1 c2
 				    ; return (env2, WpCompose c1' c2') }
-zonkCoFn env (WpCast co)    = do { co' <- zonkTcCoToCo env co
-				 ; return (env, WpCast co') }
+zonkCoFn env (WpCast (eqvs_covs, co)) = do { (env', eqvs_covs') <- zonkEqVarCoVarBind env eqvs_covs
+                                           ; co' <- zonkTcCoToCo env' co
+				           ; return (env, WpCast (eqvs_covs', co')) }
 zonkCoFn env (WpEvLam ev)   = do { (env', ev') <- zonkEvBndrX env ev
 				 ; return (env', WpEvLam ev') }
-zonkCoFn env (WpEvApp arg)  = do { arg' <- zonkEvTerm env arg 
+zonkCoFn env (WpEvApp arg)  = do { arg' <- zonkVaredEvTerm env arg 
                                  ; return (env, WpEvApp arg') }
 zonkCoFn env (WpTyLam tv)   = ASSERT( isImmutableTyVar tv )
                               return (env, WpTyLam tv) 
@@ -1045,11 +1046,17 @@ zonkVect env (HsNoVect v)
 zonkEvTerm :: ZonkEnv -> EvTerm -> TcM EvTerm
 zonkEvTerm env (EvId v)           = ASSERT2( isId v, ppr v ) 
                                     return (EvId (zonkIdOcc env v))
-zonkEvTerm env (EvCoercion co)    = do { co' <- zonkTcCoToCo env co
-                                       ; return (EvCoercion co') }
+zonkEvTerm env (EvCoercionBox co) = do { co' <- zonkTcCoToCo env co
+                                       ; return (EvCoercionBox co') }
 zonkEvTerm env (EvCast v co)      = ASSERT( isId v) 
                                     do { co' <- zonkTcCoToCo env co
                                        ; return (EvCast (zonkIdOcc env v) co') }
+zonkEvTerm env (EvUnbox dc tys v) = do
+  tys' <- zonkTcTypeToTypes env tys
+  return (EvUnbox dc tys' (zonkIdOcc env v))
+zonkEvTerm env (EvBox dc tys v)   = do
+  tys' <- zonkTcTypeToTypes env tys
+  return (EvBox dc tys' (zonkIdOcc env v))
 zonkEvTerm env (EvTupleSel v n)   = return (EvTupleSel (zonkIdOcc env v) n)
 zonkEvTerm env (EvTupleMk vs)     = return (EvTupleMk (map (zonkIdOcc env) vs))
 zonkEvTerm env (EvSuperClass d n) = return (EvSuperClass (zonkIdOcc env d) n)
@@ -1079,10 +1086,24 @@ zonkEvBinds env binds
     collect_ev_bndrs = foldrBag add [] 
     add (EvBind var _) vars = var : vars
 
+zonkEqVarCoVarBind :: ZonkEnv -> [(EqVar, CoVar)] -> TcM (ZonkEnv, [(EqVar, CoVar)])
+zonkEqVarCoVarBind env eqvs_covs
+  = mapAccumLM (\env (eqv, cov) -> do {
+                  cov' <- zonkIdBndr env cov;
+                  return (extendZonkEnv1 env cov', (zonkIdOcc env eqv, cov')) })
+               env eqvs_covs
+
+zonkVaredEvTerm :: ZonkEnv -> VaredEvTerm -> TcM VaredEvTerm
+zonkVaredEvTerm env (eqvs_covs, term)
+  = do { (env', eqvs_covs') <- zonkEqVarCoVarBind env eqvs_covs
+       ; term' <- zonkEvTerm env' term
+       ; return (eqvs_covs', term') }
+       
+
 zonkEvBind :: ZonkEnv -> EvBind -> TcM EvBind
 zonkEvBind env (EvBind var term)
   = do { var' <- zonkEvBndr env var
-       ; term' <- zonkEvTerm env term
+       ; term' <- zonkVaredEvTerm env term
        ; return (EvBind var' term') }
 \end{code}
 

@@ -85,6 +85,7 @@ module TyCon(
 
 import {-# SOURCE #-} TypeRep ( Kind, Type, PredType )
 import {-# SOURCE #-} DataCon ( DataCon, isVanillaDataCon )
+import {-# SOURCE #-} TysWiredIn ( ipTyCon )
 
 import Var
 import Class
@@ -562,7 +563,7 @@ okParent :: Name -> TyConParent -> Bool
 okParent _       NoParentTyCon                    = True
 okParent tc_name (AssocFamilyTyCon cls)           = tc_name `elem` map tyConName (classATs cls)
 okParent tc_name (ClassTyCon cls)                 = tc_name == tyConName (classTyCon cls)
-okParent _       (IPTyCon _)                      = True -- FIXME: be less rubbish
+okParent tc_name (IPTyCon ip)                     = tc_name == tyConName (ipTyCon ip)
 okParent _       (FamInstTyCon fam_tc tys _co_tc) = tyConArity fam_tc == length tys
 
 isNoParent :: TyConParent -> Bool

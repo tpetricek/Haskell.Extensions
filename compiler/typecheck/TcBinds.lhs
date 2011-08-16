@@ -864,7 +864,7 @@ unifyCtxts (sig1 : sigs)
     unify_ctxt sig@(TcSigInfo { sig_theta = theta })
         = setSrcSpan (sig_loc sig)                      $
           addErrCtxt (sigContextsCtxt sig1 sig)         $
-          do { cois <- unifyTheta theta1 theta
+          do { mk_cos <- unifyTheta theta1 theta
              ; -- Check whether all coercions are identity coercions
                -- That can happen if we have, say
                --         f :: C [a]   => ...
@@ -872,7 +872,7 @@ unifyCtxts (sig1 : sigs)
                -- where F is a type function and (F a ~ [a])
                -- Then unification might succeed with a coercion.  But it's much
                -- much simpler to require that such signatures have identical contexts
-               checkTc (all isReflCo cois)
+               checkTc (isReflMkCos mk_cos)
                        (ptext (sLit "Mutually dependent functions have syntactically distinct contexts"))
              }
 \end{code}

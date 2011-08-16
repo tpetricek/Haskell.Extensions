@@ -126,10 +126,10 @@ tcMatchPreds
 	-> [PredType] -> [PredType]
    	-> Maybe TvSubstEnv
 tcMatchPreds tmpls ps1 ps2
-  = matchList (match_pred menv) emptyTvSubstEnv ps1 ps2
+  = matchList (match menv) emptyTvSubstEnv ps1 ps2
   where
     menv = ME { me_tmpls = mkVarSet tmpls, me_env = mkRnEnv2 in_scope_tyvars }
-    in_scope_tyvars = mkInScopeSet (tyVarsOfTheta ps1 `unionVarSet` tyVarsOfTheta ps2)
+    in_scope_tyvars = mkInScopeSet (tyVarsOfTypes ps1 `unionVarSet` tyVarsOfTypes ps2)
 
 -- This one is called from the expression matcher, which already has a MatchEnv in hand
 ruleMatchTyX :: MatchEnv 

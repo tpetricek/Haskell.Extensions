@@ -25,8 +25,8 @@ module TcMType (
 
   --------------------------------
   -- Creating new evidence variables
-  newEvVar, newCoVar, newEvVars,
-  newIP, newDict, 
+  newEvVar, newEvVars,
+  newEq, newIP, newDict,
 
   newWantedEvVar, newWantedEvVars,
   newTcEvBinds, addTcEvBind,
@@ -132,6 +132,7 @@ newWantedEvVars :: TcThetaType -> TcM [EvVar]
 newWantedEvVars theta = mapM newWantedEvVar theta 
 
 --------------
+
 newEvVar :: TcPredType -> TcM EvVar
 -- Creates new *rigid* variables for predicates
 newEvVar ty = do { name <- newName (predTypeOccName ty) 
@@ -139,8 +140,8 @@ newEvVar ty = do { name <- newName (predTypeOccName ty)
 
 newEq :: TcType -> TcType -> TcM EvVar
 newEq ty1 ty2
-  = do { name <- newName (mkVarOccFS (fsLit "co"))
-       ; return (mkLocalId name (mkLiftedEqPred ty1 ty2))) }
+  = do { name <- newName (mkVarOccFS (fsLit "cobox"))
+       ; return (mkLocalId name (mkEqPred (ty1, ty2))) }
 
 newIP :: IPName Name -> TcType -> TcM IpId
 newIP ip ty
@@ -152,17 +153,11 @@ newDict cls tys
   = do { name <- newName (mkDictOcc (getOccName cls))
        ; return (mkLocalId name (mkClassPred cls tys)) }
 
-newName :: OccName -> TcM Name
-newName occ
-  = do { uniq <- newUnique
-       ; loc  <- getSrcSpanM
-       ; return (mkInternalName uniq occ loc) }
-
 predTypeOccName :: PredType -> OccName
 predTypeOccName ty = case predTypePredTree ty of
     ClassPred cls _ -> mkDictOcc (getOccName cls)
     IPPred ip _     -> getOccName (ipNameName ip)
-    EqPred _ _      -> mkVarOccFS (fsLit "co")
+    EqPred _ _      -> mkVarOccFS (fsLit "cobox")
     TuplePred _     -> mkVarOccFS (fsLit "tup")
     IrredPred _     -> mkVarOccFS (fsLit "irred")
 \end{code}
@@ -1110,17 +1105,17 @@ check_valid_theta ctxt theta = do
 
 -------------------------
 check_pred_ty :: DynFlags -> SourceTyCtxt -> PredType -> TcM ()
-check_pred_ty dflags ctxt pred = check_pred_ty' dflags ctxt pred (predTypePredTree pred)
+check_pred_ty dflags ctxt pred = check_pred_ty' dflags ctxt (predTypePredTree pred)
 
-check_pred_ty :: DynFlags -> SourceTyCtxt -> PredType -> PredTree -> TcM ()
-check_pred_ty' dflags ctxt pred (ClassPred cls tys)
+check_pred_ty' :: DynFlags -> SourceTyCtxt -> PredTree -> TcM ()
+check_pred_ty' dflags ctxt (ClassPred cls tys)
   = do {	-- Class predicates are valid in all contexts
        ; checkTc (arity == n_tys) arity_err
 
 		-- Check the form of the argument types
        ; mapM_ checkValidMonoType tys
        ; checkTc (check_class_pred_tys dflags ctxt tys)
-		 (predTyVarErr pred $$ how_to_allow)
+		 (predTyVarErr (mkClassPred cls tys) $$ how_to_allow)
        }
   where
     class_name = className cls
@@ -1130,18 +1125,18 @@ check_pred_ty' dflags ctxt pred (ClassPred cls tys)
     how_to_allow = parens (ptext (sLit "Use -XFlexibleContexts to permit this"))
 
 
-check_pred_ty' dflags _ctxt pred (EqPred ty1 ty2)
+check_pred_ty' dflags _ctxt (EqPred ty1 ty2)
   = do {	-- Equational constraints are valid in all contexts if type
 		-- families are permitted
        ; checkTc (xopt Opt_TypeFamilies dflags || xopt Opt_GADTs dflags) 
-                 (eqPredTyErr pred)
+                 (eqPredTyErr (mkEqPred (ty1, ty2)))
 
 		-- Check the form of the argument types
        ; checkValidMonoType ty1
        ; checkValidMonoType ty2
        }
 
-check_pred_ty' _ SigmaCtxt pred (IPPred _ ty) = checkValidMonoType ty
+check_pred_ty' _ SigmaCtxt (IPPred _ ty) = checkValidMonoType ty
 	-- Implicit parameters only allowed in type
 	-- signatures; not in instance decls, superclasses etc
 	-- The reason for not allowing implicit params in instances is a bit
@@ -1152,18 +1147,18 @@ check_pred_ty' _ SigmaCtxt pred (IPPred _ ty) = checkValidMonoType ty
 	-- constraint Foo [Int] might come out of e,and applying the
 	-- instance decl would show up two uses of ?x.
 
-check_pred_ty' dflags ctxt pred (TuplePred ts)
-  | xopt Opt_FactKind dflags = mapM_ (check_pred_ty' dflags ctxt pred) ts
-  | otherwise                = failWithTc (predTupleErr pred $$ how_to_allow)
+check_pred_ty' dflags ctxt t@(TuplePred ts)
+  | xopt Opt_FactKind dflags = mapM_ (check_pred_ty' dflags ctxt) ts
+  | otherwise                = failWithTc (predTupleErr (predTreePredType t) $$ how_to_allow)
   where how_to_allow = parens (ptext (sLit "Use -XFactKind to permit this"))
 
-check_pred_ty' dflags ctxt pred (IrredPred ts)
+check_pred_ty' dflags _ (IrredPred pred)
   | xopt Opt_FactKind dflags = return ()
   | otherwise                = failWithTc (predIrredErr pred $$ how_to_allow)
   where how_to_allow = parens (ptext (sLit "Use -XFactKind to permit this"))
 
 -- Catch-all
-check_pred_ty' _ _ sty = failWithTc (badPredTyErr sty)
+check_pred_ty' _ _ t  = failWithTc (badPredTyErr (predTreePredType t))
 
 -------------------------
 check_class_pred_tys :: DynFlags -> SourceTyCtxt -> [Type] -> Bool
@@ -1233,14 +1228,14 @@ checkAmbiguity forall_tyvars theta tau_tyvars
 
 	-- See Note [Implicit parameters and ambiguity] in TcSimplify
     is_ambig pred     = isClassPred  pred &&
-			any ambig_var (varSetElems (tyVarsOfPred pred))
+			any ambig_var (varSetElems (tyVarsOfType pred))
 
     ambig_var ct_var  = (ct_var `elem` forall_tyvars) &&
 		        not (ct_var `elemVarSet` extended_tau_vars)
 
 ambigErr :: PredType -> SDoc
 ambigErr pred
-  = sep [ptext (sLit "Ambiguous constraint") <+> quotes (pprPredTy pred),
+  = sep [ptext (sLit "Ambiguous constraint") <+> quotes (pprType pred),
 	 nest 2 (ptext (sLit "At least one of the forall'd type variables mentioned by the constraint") $$
 		 ptext (sLit "must be reachable from the type after the '=>'"))]
 \end{code}
@@ -1267,12 +1262,12 @@ growPredTyVars :: TcPredType
                -> TyVarSet	-- The set to extend
 	       -> TyVarSet	-- TyVars of the predicate if it intersects
 	       	  		-- the set, or is implicit parameter
-growPredTyVars pred tvs = go (predTreeFromPredType pred)
+growPredTyVars pred tvs = go (predTypePredTree pred)
   where
     grow pred_tvs | pred_tvs `intersectsVarSet` tvs = pred_tvs
                   | otherwise                       = emptyVarSet
 
-    go (IPPred {})       = pred_tvs -- See Note [Implicit parameters and ambiguity]
+    go (IPPred _ ty)     = tyVarsOfType ty -- See Note [Implicit parameters and ambiguity]
     go (ClassPred _ tys) = grow (tyVarsOfTypes tys)
     go (EqPred ty1 ty2)  = grow (tyVarsOfType ty1 `unionVarSet` tyVarsOfType ty2)
     go (TuplePred ts)    = unionVarSets (map go ts)
@@ -1306,16 +1301,16 @@ checkThetaCtxt ctxt theta
 	  ptext (sLit "While checking") <+> pprSourceTyCtxt ctxt ]
 
 badPredTyErr, eqPredTyErr, predTyVarErr, predTupleErr, predIrredErr :: PredType -> SDoc
-badPredTyErr pred = ptext (sLit "Illegal constraint") <+> pprPredTy pred
-eqPredTyErr  pred = ptext (sLit "Illegal equational constraint") <+> pprPredTy pred
+badPredTyErr pred = ptext (sLit "Illegal constraint") <+> pprType pred
+eqPredTyErr  pred = ptext (sLit "Illegal equational constraint") <+> pprType pred
 		    $$
 		    parens (ptext (sLit "Use -XGADTs or -XTypeFamilies to permit this"))
 predTyVarErr pred  = sep [ptext (sLit "Non type-variable argument"),
-			  nest 2 (ptext (sLit "in the constraint:") <+> pprPredTy pred)]
-predTupleErr pred  = ptext (sLit "Illegal tuple constraint") <+> pprPredTy pred
-predIrredErr pred  = ptext (sLit "Illegal irreducible constraint") <+> pprPredTy pred
+			  nest 2 (ptext (sLit "in the constraint:") <+> pprType pred)]
+predTupleErr pred  = ptext (sLit "Illegal tuple constraint") <+> pprType pred
+predIrredErr pred  = ptext (sLit "Illegal irreducible constraint") <+> pprType pred
 dupPredWarn :: [[PredType]] -> SDoc
-dupPredWarn dups   = ptext (sLit "Duplicate constraint(s):") <+> pprWithCommas pprPredTy (map head dups)
+dupPredWarn dups   = ptext (sLit "Duplicate constraint(s):") <+> pprWithCommas pprType (map head dups)
 
 arityErr :: Outputable a => String -> a -> Int -> Int -> SDoc
 arityErr kind name n m
@@ -1476,7 +1471,7 @@ checkInstTermination tys theta
    fvs  = fvTypes tys
    size = sizeTypes tys
    check pred 
-      | not (null (fvPred pred \\ fvs)) 
+      | not (null (fvType pred \\ fvs)) 
       = Just (predUndecErr pred nomoreMsg $$ parens undecidableMsg)
       | sizePred pred >= size
       = Just (predUndecErr pred smallerMsg $$ parens undecidableMsg)
@@ -1618,9 +1613,9 @@ sizeTypes xs               = sum (map sizeType xs)
 sizePred :: PredType -> Int
 sizePred ty = go (predTypePredTree ty)
   where
-    go (ClassPred _ tys') -> sizeTypes tys'
-    go (IPPred {})        -> 0
-    go (EqPred {})        -> 0
-    go (TuplePred ts)     -> sum (map go ts)
-    go (IrredPred ty)     -> sizeType ty
+    go (ClassPred _ tys') = sizeTypes tys'
+    go (IPPred {})        = 0
+    go (EqPred {})        = 0
+    go (TuplePred ts)     = sum (map go ts)
+    go (IrredPred ty)     = sizeType ty
 \end{code}

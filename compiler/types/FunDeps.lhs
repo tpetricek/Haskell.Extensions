@@ -21,6 +21,7 @@ module FunDeps (
 import Name
 import Var
 import Class
+import Type
 import TcType
 import Unify
 import InstEnv
@@ -132,12 +133,12 @@ oclose preds fixed_tvs
 		let (xs,ys) = instFD fd cls_tvs tys
 	      ]
      
-     classesOfPredTy :: PredType -> [(Class, [Type])]
-     classesOfPredTy = go . predTypePredTree
-       where
-        go (ClassPred cls tys) = [(cls, tys)]
-        go (TuplePred ts)      = concatMap go ts
-        go _                   = []
+    classesOfPredTy :: PredType -> [(Class, [Type])]
+    classesOfPredTy = go . predTypePredTree
+      where
+       go (ClassPred cls tys) = [(cls, tys)]
+       go (TuplePred ts)      = concatMap go ts
+       go _                   = []
 \end{code}
 
     
@@ -306,6 +307,9 @@ improveFromInstEnv _inst_env (pred,_loc)
 improveFromInstEnv inst_env pred@(ty, _)
   | Just (cls, tys) <- getClassPredTys_maybe ty
   , tys `lengthAtLeast` 2
+  , let (cls_tvs, cls_fds) = classTvsFds cls
+        instances          = classInstances inst_env cls
+        rough_tcs          = roughMatchTcs tys
   = [ FDEqn { fd_qtvs = qtvs, fd_eqs = eqs, fd_pred1 = p_inst, fd_pred2=pred }
     | fd <- cls_fds		-- Iterate through the fundeps first,
 				-- because there often are none!
@@ -324,10 +328,6 @@ improveFromInstEnv inst_env pred@(ty, _)
     , (qtvs, eqs) <- checkClsFD qtvs fd cls_tvs tys_inst tys -- NB: orientation
     , not (null eqs)
     ]
-  where 
-     (cls_tvs, cls_fds) = classTvsFds cls
-     instances          = classInstances inst_env cls
-     rough_tcs          = roughMatchTcs tys
 improveFromInstEnv _ _ = []
 
 

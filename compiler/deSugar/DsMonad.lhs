@@ -50,7 +50,6 @@ import TyCon
 import Class
 import Id
 import Module
-import Var
 import Outputable
 import SrcLoc
 import Type

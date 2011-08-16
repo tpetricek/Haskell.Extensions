@@ -23,6 +23,7 @@ import TcType
 import InstEnv
 import FamInstEnv
 import PrelNames        ( iNTERACTIVE )
+import Coercion
 
 import Var
 import Id
@@ -370,6 +371,17 @@ newSysLocalIds :: FastString -> [TcType] -> TcRnIf gbl lcl [TcId]
 newSysLocalIds fs tys
   = do	{ us <- newUniqueSupply
 	; return (zipWith (mkSysLocal fs) (uniqsFromSupply us) tys) }
+
+newCoVar :: TcType -> TcType -> TcM EvVar
+newCoVar ty1 ty2
+  = do { name <- newName (mkVarOccFS (fsLit "co"))
+       ; return (mkLocalId name (mkCoercionType ty1 ty2)) }
+
+newName :: OccName -> TcM Name
+newName occ
+  = do { uniq <- newUnique
+       ; loc  <- getSrcSpanM
+       ; return (mkInternalName uniq occ loc) }
 
 instance MonadUnique (IOEnv (Env gbl lcl)) where
         getUniqueM = newUnique
@@ -915,6 +927,11 @@ mkErrInfo env ctxts
      | otherwise
      = go n env ctxts
 
+finaliseMk :: Mk a -> TcM ([(EqVar, CoVar)], a)
+finaliseMk (Mk eqvs build) = do
+    covs <- mapM (uncurry newCoVar . getEqPredTys . evVarPred) eqvs
+    return (eqvs `zip` covs, build covs)
+
 mAX_CONTEXTS :: Int	-- No more than this number of non-landmark contexts
 mAX_CONTEXTS = 3
 \end{code}
@@ -940,18 +957,11 @@ newTcEvBinds = do { ref <- newTcRef emptyEvBindMap
        		  ; uniq <- newUnique
        		  ; return (EvBindsVar ref uniq) }
 
-extendTcEvBinds :: TcEvBinds -> EvVar -> EvTerm -> TcM TcEvBinds
-extendTcEvBinds binds@(TcEvBinds binds_var) var rhs 
-  = do { addTcEvBind binds_var var rhs
-       ; return binds }
-extendTcEvBinds (EvBinds bnds) var rhs
-  = return (EvBinds (bnds `snocBag` EvBind var rhs))
-
-addTcEvBind :: EvBindsVar -> EvVar -> EvTerm -> TcM ()
+addTcEvBind :: EvBindsVar -> EvVar -> VaredEvTerm -> TcM ()
 -- Add a binding to the TcEvBinds by side effect
-addTcEvBind (EvBindsVar ev_ref _) var rhs
+addTcEvBind (EvBindsVar ev_ref _) var t
   = do { bnds <- readTcRef ev_ref
-       ; writeTcRef ev_ref (extendEvBinds bnds var rhs) }
+       ; writeTcRef ev_ref (extendEvBinds bnds var t) }
 
 chooseUniqueOccTc :: (OccSet -> OccName) -> TcM OccName
 chooseUniqueOccTc fn =

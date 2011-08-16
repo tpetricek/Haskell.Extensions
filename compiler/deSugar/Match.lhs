@@ -910,18 +910,18 @@ viewLExprEq (e1,_) (e2,_) = lexp e1 e2
     -- (e.g., reassociating compositions,
     --        equating different ways of writing a coercion)
     wrap WpHole WpHole = True
-    wrap (WpCompose w1 w2) (WpCompose w1' w2') = wrap w1 w1' && wrap w2 w2'
-    wrap (WpCast c)  (WpCast c')     = coreEqCoercion c c'
-    wrap (WpEvApp et1) (WpEvApp et2) = ev_term et1 et2
-    wrap (WpTyApp t) (WpTyApp t')    = eqType t t'
+    wrap (WpCompose w1 w2)      (WpCompose w1' w2')    = wrap w1 w1' && wrap w2 w2'
+    wrap (WpCast (ecvs1, c))    (WpCast (ecvs2, c'))   = ecvs1 == ecvs2 && coreEqCoercion c c'
+    wrap (WpEvApp (ecvs1, et1)) (WpEvApp (ecvs2, et2)) = ecvs1 == ecvs2 && ev_term et1 et2
+    wrap (WpTyApp t)            (WpTyApp t')           = eqType t t'
     -- Enhancement: could implement equality for more wrappers
     --   if it seems useful (lams and lets)
     wrap _ _ = False
 
     ---------
     ev_term :: EvTerm -> EvTerm -> Bool
-    ev_term (EvId a)       (EvId b)       = a==b
-    ev_term (EvCoercion a) (EvCoercion b) = coreEqCoercion a b
+    ev_term (EvId a)          (EvId b)          = a==b
+    ev_term (EvCoercionBox a) (EvCoercionBox b) = coreEqCoercion a b
     ev_term _ _ = False	
 
     ---------

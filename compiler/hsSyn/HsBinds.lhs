@@ -25,6 +25,7 @@ import {-# SOURCE #-} HsPat  ( LPat )
 import HsTypes
 import PprCore ()
 import Coercion
+import DataCon
 import Type
 import Name
 import NameSet
@@ -374,6 +375,8 @@ instance (OutputableBndr id) => Outputable (IPBind id) where
 -- A HsWrapper is an expression with a hole in it
 -- We need coercions to have concrete form so that we can zonk them
 
+type HsCoWrapper = ([(EqVar, CoVar)], Coercion)
+
 data HsWrapper
   = WpHole			-- The identity coercion
 
@@ -383,13 +386,13 @@ data HsWrapper
        -- Hence  (\a. []) `WpCompose` (\b. []) = (\a b. [])
        -- But    ([] a)   `WpCompose` ([] b)   = ([] b a)
 
-  | WpCast Coercion		-- A cast:  [] `cast` co
-				-- Guaranteed not the identity coercion
+  | WpCast HsCoWrapper          -- A cast:  [] `cast` co
+                                -- Guaranteed not the identity coercion
 
 	-- Evidence abstraction and application
         -- (both dictionaries and coercions)
   | WpEvLam EvVar 		-- \d. []	the 'd' is an evidence variable
-  | WpEvApp EvTerm		-- [] d		the 'd' is evidence for a constraint
+  | WpEvApp VaredEvTerm		-- [] d		the 'd' is evidence for a constraint
 
 	-- Type abstraction and application
   | WpTyLam TyVar 		-- \a. []	the 'a' is a type variable (not coercion var)
@@ -420,7 +423,7 @@ type EvBindMap = VarEnv EvBind
 emptyEvBindMap :: EvBindMap
 emptyEvBindMap = emptyVarEnv
 
-extendEvBinds :: EvBindMap -> EvVar -> EvTerm -> EvBindMap
+extendEvBinds :: EvBindMap -> EvVar -> ([(EvVar, CoVar)], EvTerm) -> EvBindMap
 extendEvBinds bs v t = extendVarEnv bs v (EvBind v t)
 
 lookupEvBind :: EvBindMap -> EvVar -> Maybe EvBind
@@ -437,18 +440,23 @@ instance Data TcEvBinds where
   dataTypeOf _ = mkNoRepType "TcEvBinds"
 
 -- All evidence is bound by EvBinds; no side effects
-data EvBind = EvBind EvVar EvTerm
+type VaredEvTerm = ([(EqVar, CoVar)], EvTerm)
+data EvBind = EvBind EvVar VaredEvTerm
 
 data EvTerm
   = EvId EvId                  -- Term-level variable-to-variable bindings 
-                               -- (no coercion variables! they come via EvCoercion)
+                               -- (no coercion variables! they come via EvCoercionBox)
 
-  | EvCoercion Coercion        -- Coercion bindings
+  | EvCoercionBox Coercion     -- (Boxed) coercion bindings
 
   | EvCast EvVar Coercion      -- d |> co
 
   | EvDFunApp DFunId           -- Dictionary instance application
        [Type] [EvVar] 
+
+  | EvBox DataCon [Type] EvId   -- Box single field into this product DataCon
+
+  | EvUnbox DataCon [Type] EvId -- Unbox single field from this product DataCon
 
   | EvTupleSel EvId  Int       -- n'th component of the tuple
 
@@ -459,10 +467,6 @@ data EvTerm
 			       -- selector Id.  We count up from _0_ 
 			       
   deriving( Data, Typeable)
-
-evVarTerm :: EvVar -> EvTerm
-evVarTerm v | isCoVar v = EvCoercion (mkCoVarCo v)
-            | otherwise = EvId v
 \end{code}
 
 Note [EvBinds/EvTerm]
@@ -499,11 +503,11 @@ c1 <.> c2    = c1 `WpCompose` c2
 mkWpTyApps :: [Type] -> HsWrapper
 mkWpTyApps tys = mk_co_app_fn WpTyApp tys
 
-mkWpEvApps :: [EvTerm] -> HsWrapper
+mkWpEvApps :: [VaredEvTerm] -> HsWrapper
 mkWpEvApps args = mk_co_app_fn WpEvApp args
 
 mkWpEvVarApps :: [EvVar] -> HsWrapper
-mkWpEvVarApps vs = mkWpEvApps (map evVarTerm vs)
+mkWpEvVarApps vs = mkWpEvApps (map (\v -> ([], EvId v)) vs)
 
 mkWpTyLams :: [TyVar] -> HsWrapper
 mkWpTyLams ids = mk_co_lam_fn WpTyLam ids
@@ -549,8 +553,8 @@ pprHsWrapper doc wrap
     -- False <=> appears as body of let or lambda
     help it WpHole             = it
     help it (WpCompose f1 f2)  = help (help it f2) f1
-    help it (WpCast co)   = add_parens $ sep [it False, nest 2 (ptext (sLit "|>") 
-                                              <+> pprParendCo co)]
+    help it (WpCast (eqvs_covs, co))   = add_parens $ sep [it False, nest 2 (ptext (sLit "|>") 
+                                              <+> parens (ppr eqvs_covs <+> pprParendCo co))]
     help it (WpEvApp id)  = no_parens  $ sep [it True, nest 2 (ppr id)]
     help it (WpTyApp ty)  = no_parens  $ sep [it True, ptext (sLit "@") <+> pprParendType ty]
     help it (WpEvLam id)  = add_parens $ sep [ ptext (sLit "\\") <> pp_bndr id, it False]
@@ -572,12 +576,15 @@ instance Outputable EvBindsVar where
   ppr (EvBindsVar _ u) = ptext (sLit "EvBindsVar") <> angleBrackets (ppr u)
 
 instance Outputable EvBind where
-  ppr (EvBind v e)   = ppr v <+> equals <+> ppr e
+  ppr (EvBind v (evs, e))   = ppr v <+> equals <+> ppr (evs, e)
+   -- We cheat a bit and pretend EqVars are CoVars for the purposes of pretty printing
 
 instance Outputable EvTerm where
   ppr (EvId v)        	 = ppr v
   ppr (EvCast v co)      = ppr v <+> (ptext (sLit "`cast`")) <+> pprParendCo co
-  ppr (EvCoercion co)    = ptext (sLit "CO") <+> ppr co
+  ppr (EvCoercionBox co) = ptext (sLit "CO") <+> ppr co
+  ppr (EvBox dc tys v)   = ptext (sLit "box") <+> ppr dc <+> sep [ char '@' <> ppr tys, ppr v ]
+  ppr (EvUnbox dc tys v) = ptext (sLit "unbox") <+> ppr dc <+> sep [ char '@' <> ppr tys, ppr v ]
   ppr (EvTupleSel v n)   = ptext (sLit "tupsel") <> parens (ppr (v,n))
   ppr (EvTupleMk vs)     = ptext (sLit "tupmk") <+> ppr vs
   ppr (EvSuperClass d n) = ptext (sLit "sc") <> parens (ppr (d,n))

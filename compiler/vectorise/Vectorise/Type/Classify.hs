@@ -87,5 +87,4 @@ tyConsOfType (AppTy a b)       = tyConsOfType a `unionUniqSets` tyConsOfType b
 tyConsOfType (FunTy a b)       = (tyConsOfType a `unionUniqSets` tyConsOfType b)
                                  `addOneToUniqSet` funTyCon
 tyConsOfType (ForAllTy _ ty)   = tyConsOfType ty
-tyConsOfType other             = pprPanic "ClosureConv.tyConsOfType" $ ppr other
 
