@@ -1736,12 +1736,12 @@ gtycon 	:: { Located RdrName }	-- A "general" qualified tycon
 	| '(#' commas '#)'		{ LL $ getRdrName (tupleTyCon Unboxed ($2 + 1)) }
 	| '(' '->' ')'			{ LL $ getRdrName funTyCon }
 	| '[' ']'			{ LL $ listTyCon_RDR }
-	| '(' '~' ')'			{ LL $ eqTyCon_RDR }
 	| '[:' ':]'			{ LL $ parrTyCon_RDR }
 
 oqtycon :: { Located RdrName }	-- An "ordinary" qualified tycon
 	: qtycon			{ $1 }
  	| '(' qtyconsym ')'		{ LL (unLoc $2) }
+	| '(' '~' ')'			{ LL $ eqTyCon_RDR } -- In here rather than gtycon because I want to write it in the GHC.Types export list
 
 qtyconop :: { Located RdrName }	-- Qualified or unqualified
 	: qtyconsym			{ $1 }

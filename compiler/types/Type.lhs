@@ -155,7 +155,7 @@ import PrelNames	         ( eqTyConKey, eqPrimTyConKey )
 -- others
 import Unique		( Unique, hasKey )
 import BasicTypes	( IPName )
-import Name		( Name )
+import Name		( Name, nameOccName )
 import NameSet
 import StaticFlags
 import Util
@@ -774,7 +774,9 @@ noParenPred :: PredType -> Bool
 noParenPred p = isClassPred p || isEqPred p
 
 isClassPred, isEqPred, isIPPred :: PredType -> Bool
-isClassPred = isDictTy
+isClassPred ty = case tyConAppTyCon_maybe ty of
+    Just tyCon | isClassTyCon tyCon -> True
+    _                               -> False
 isEqPred ty = case tyConAppTyCon_maybe ty of
     Just tyCon -> tyCon `hasKey` eqTyConKey
     _          -> False
@@ -813,7 +815,7 @@ mkPrimEqType (ty1, ty2) = TyConApp eqPrimTyCon [ty1, ty2]
 
 \begin{code}
 mkIPPred :: IPName Name -> Type -> PredType
-mkIPPred ip ty = TyConApp (ipTyCon ip) [ty]
+mkIPPred ip ty = TyConApp (ipTyCon (fmap nameOccName ip)) [ty]
 \end{code}
 
 --------------------- Dictionary types ---------------------------------
@@ -1486,9 +1488,11 @@ typeKind :: Type -> Kind
 typeKind ty@(TyConApp tc tys) 
   | isBoxedTupleTyCon tc
   , tyConArity tc == length tys
-  = case theBy eqKind (map typeKind tys) of
-      Just k  -> k
-      Nothing -> pprPanic "typeKind: insane tuple kinds" (ppr ty)
+  = if null tys
+    then liftedTypeKind -- FIXME: can't write nullary facts!!
+    else case theBy eqKind (map typeKind tys) of
+           Just k  -> k
+           Nothing -> pprPanic "typeKind: insane tuple kinds" (ppr ty)
 
   | otherwise
   = ASSERT2( not (tc `hasKey` eqPrimTyConKey) || length tys == 2, ppr ty )

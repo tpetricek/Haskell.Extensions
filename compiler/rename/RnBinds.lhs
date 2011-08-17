@@ -28,7 +28,7 @@ import {-# SOURCE #-} RnExpr( rnLExpr, rnStmts )
 import HsSyn
 import RnHsSyn
 import TcRnMonad
-import RnTypes        ( rnHsSigType, rnLHsType, checkPrecMatch)
+import RnTypes        ( rnIPName, rnHsSigType, rnLHsType, checkPrecMatch )
 import RnPat          (rnPats, rnBindPat,
                        NameMaker, localRecNameMaker, topRecNameMaker, applyNameMaker
                       )
@@ -232,9 +232,8 @@ rnIPBinds (IPBinds ip_binds _no_dict_binds) = do
 
 rnIPBind :: IPBind RdrName -> RnM (IPBind Name, FreeVars)
 rnIPBind (IPBind n expr) = do
-    name <- newIPNameRn  n
     (expr',fvExpr) <- rnLExpr expr
-    return (IPBind name expr', fvExpr)
+    return (IPBind (rnIPName n) expr', fvExpr)
 \end{code}
 
 

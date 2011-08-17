@@ -15,9 +15,6 @@ module UniqSupply (
         mkSplitUniqSupply,
         splitUniqSupply, listSplitUniqSupply,
 
-        -- * Hack for generating implicit parameter Ty/DataCon uniques
-        mkMaskedUniqueGrimily,
-
         -- * Unique supply monad and its abstraction
         UniqSM, MonadUnique(..),
 
@@ -93,10 +90,6 @@ mkSplitUniqSupply c
        mk_supply
 
 foreign import ccall unsafe "genSymZh" genSymZh :: IO Int
-
-mkMaskedUniqueGrimily :: Char -> FastInt -> Unique
-mkMaskedUniqueGrimily c u = case fastOrd (cUnbox c) `shiftLFastInt` _ILIT(24) of
-     mask -> mkUniqueGrimily (iBox (mask `bitOrFastInt` u))
 
 splitUniqSupply (MkSplitUniqSupply _ s1 s2) = (s1, s2)
 listSplitUniqSupply  (MkSplitUniqSupply _ s1 s2) = s1 : listSplitUniqSupply s2

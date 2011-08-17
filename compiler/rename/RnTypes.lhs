@@ -8,6 +8,7 @@ module RnTypes (
 	-- Type related stuff
 	rnHsType, rnLHsType, rnLHsTypes, rnContext,
 	rnHsSigType, rnHsTypeFVs, rnConDeclFields, rnLPred,
+        rnIPName,
 
 	-- Precence related stuff
 	mkOpAppRn, mkNegAppRn, mkOpFormRn, mkConOpPatRn,
@@ -31,13 +32,15 @@ import RnEnv
 import TcRnMonad
 import RdrName
 import PrelNames
+import TysWiredIn       ( ipTyCon )
 import TysPrim          ( funTyConName )
+import TyCon            ( tyConName )
 import Name
 import SrcLoc
 import NameSet
 
 import Util		( filterOut )
-import BasicTypes	( compareFixity, funTyFixity, negateFixity, 
+import BasicTypes	( IPName(..), compareFixity, funTyFixity, negateFixity, 
 			  Fixity(..), FixityDirection(..) )
 import Outputable
 import FastString
@@ -261,10 +264,12 @@ rnPred doc (HsEqualP ty1 ty2)
        ; return (HsEqualP ty1' ty2')
        }
 rnPred doc (HsIParam n ty)
-  = do { name <- newIPNameRn n
-       ; ty' <- rnLHsType doc ty
-       ; return (HsIParam name ty')
+  = do { ty' <- rnLHsType doc ty
+       ; return (HsIParam (rnIPName n) ty')
        }
+
+rnIPName :: IPName RdrName -> IPName Name
+rnIPName n = IPName (tyConName (ipTyCon (fmap rdrNameOcc n)))
 \end{code}
 
 

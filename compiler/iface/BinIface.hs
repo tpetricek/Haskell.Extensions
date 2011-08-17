@@ -966,7 +966,8 @@ instance Binary IfaceTyCon where
    put_ bh IfaceArgTypeKindTc      = putByte bh 10
    put_ bh (IfaceTupTc bx ar)  = do { putByte bh 11; put_ bh bx; put_ bh ar }
    put_ bh (IfaceTc ext)       = do { putByte bh 12; put_ bh ext }
-   put_ bh (IfaceAnyTc k)      = do { putByte bh 13; put_ bh k }
+   put_ bh (IfaceIPTc n)       = do { putByte bh 13; put_ bh n }
+   put_ bh (IfaceAnyTc k)      = do { putByte bh 14; put_ bh k }
 
    get bh = do
 	h <- getByte bh
@@ -983,7 +984,8 @@ instance Binary IfaceTyCon where
           10 -> return IfaceArgTypeKindTc
 	  11 -> do { bx <- get bh; ar <- get bh; return (IfaceTupTc bx ar) }
 	  12 -> do { ext <- get bh; return (IfaceTc ext) }
-	  _ -> do { k <- get bh; return (IfaceAnyTc k) }
+	  13 -> do { n <- get bh; return (IfaceIPTc n) }
+          _  -> do { k <- get bh; return (IfaceAnyTc k) }
 
 instance Binary IfaceCoCon where
    put_ bh (IfaceCoAx n)       = do { putByte bh 0; put_ bh n }

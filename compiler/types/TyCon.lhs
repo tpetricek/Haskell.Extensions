@@ -563,7 +563,7 @@ okParent :: Name -> TyConParent -> Bool
 okParent _       NoParentTyCon                    = True
 okParent tc_name (AssocFamilyTyCon cls)           = tc_name `elem` map tyConName (classATs cls)
 okParent tc_name (ClassTyCon cls)                 = tc_name == tyConName (classTyCon cls)
-okParent tc_name (IPTyCon ip)                     = tc_name == tyConName (ipTyCon ip)
+okParent tc_name (IPTyCon ip)                     = tc_name == tyConName (ipTyCon (fmap nameOccName ip))
 okParent _       (FamInstTyCon fam_tc tys _co_tc) = tyConArity fam_tc == length tys
 
 isNoParent :: TyConParent -> Bool

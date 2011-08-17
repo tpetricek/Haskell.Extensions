@@ -1214,6 +1214,7 @@ tcIfaceTyCon IfaceCharTc      	= tcWiredInTyCon charTyCon
 tcIfaceTyCon IfaceListTc      	= tcWiredInTyCon listTyCon
 tcIfaceTyCon IfacePArrTc      	= tcWiredInTyCon parrTyCon
 tcIfaceTyCon (IfaceTupTc bx ar) = tcWiredInTyCon (tupleTyCon bx ar)
+tcIfaceTyCon (IfaceIPTc n)      = tcWiredInTyCon (ipTyCon n)
 tcIfaceTyCon (IfaceAnyTc kind)  = do { tc_kind <- tcIfaceType kind
                                      ; tcWiredInTyCon (anyTyConOfKind tc_kind) }
 tcIfaceTyCon (IfaceTc name)     = do { thing <- tcIfaceGlobal name 

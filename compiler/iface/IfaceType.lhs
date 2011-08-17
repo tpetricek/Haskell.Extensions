@@ -82,9 +82,10 @@ data IfaceTyCon 	-- Encodes type consructors, kind constructors
   | IfaceIntTc | IfaceBoolTc | IfaceCharTc
   | IfaceListTc | IfacePArrTc
   | IfaceTupTc Boxity Arity 
+  | IfaceIPTc (IPName OccName) -- Used for all implicit parameter TyCons
   | IfaceAnyTc IfaceKind     -- Used for AnyTyCon (see Note [Any Types] in TysPrim)
     	       		     -- other than 'Any :: *' itself
- 
+  
   -- Kind constructors
   | IfaceLiftedTypeKindTc | IfaceOpenTypeKindTc | IfaceUnliftedTypeKindTc
   | IfaceUbxTupleKindTc | IfaceArgTypeKindTc 
@@ -109,6 +110,7 @@ ifaceTyConName IfaceUnliftedTypeKindTc = unliftedTypeKindTyConName
 ifaceTyConName IfaceUbxTupleKindTc     = ubxTupleKindTyConName
 ifaceTyConName IfaceArgTypeKindTc      = argTypeKindTyConName
 ifaceTyConName (IfaceTc ext)           = ext
+ifaceTyConName (IfaceIPTc n)           = tyConName (ipTyCon n)
 ifaceTyConName (IfaceAnyTc k)          = pprPanic "ifaceTyConName" (ppr k)
 	       		    	       	 -- Note [The Name of an IfaceAnyTc]
 \end{code}
@@ -354,9 +356,10 @@ toIfaceCoVar = occNameFS . getOccName
 
 toIfaceTyCon :: TyCon -> IfaceTyCon
 toIfaceTyCon tc 
-  | isTupleTyCon tc = IfaceTupTc (tupleTyConBoxity tc) (tyConArity tc)
-  | isAnyTyCon tc   = IfaceAnyTc (toIfaceKind (tyConKind tc))
-  | otherwise	    = toIfaceTyCon_name (tyConName tc)
+  | isTupleTyCon tc            = IfaceTupTc (tupleTyConBoxity tc) (tyConArity tc)
+  | isAnyTyCon tc              = IfaceAnyTc (toIfaceKind (tyConKind tc))
+  | Just n <- tyConIP_maybe tc = IfaceIPTc (fmap nameOccName n)
+  | otherwise	               = toIfaceTyCon_name (tyConName tc)
 
 toIfaceTyCon_name :: Name -> IfaceTyCon
 toIfaceTyCon_name nm
@@ -369,6 +372,7 @@ toIfaceWiredInTyCon :: TyCon -> Name -> IfaceTyCon
 toIfaceWiredInTyCon tc nm
   | isTupleTyCon tc                 = IfaceTupTc  (tupleTyConBoxity tc) (tyConArity tc)
   | isAnyTyCon tc                   = IfaceAnyTc (toIfaceKind (tyConKind tc))
+  | Just n <- tyConIP_maybe tc      = IfaceIPTc (fmap nameOccName n)
   | nm == intTyConName              = IfaceIntTc
   | nm == boolTyConName             = IfaceBoolTc 
   | nm == charTyConName             = IfaceCharTc 

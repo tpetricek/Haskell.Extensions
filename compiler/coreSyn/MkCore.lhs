@@ -51,7 +51,7 @@ module MkCore (
 #include "HsVersions.h"
 
 import Id
-import Var      ( EvVar, setTyVarUnique, varName )
+import Var      ( EvVar, setTyVarUnique )
 
 import CoreSyn
 import CoreUtils        ( exprType, needsCaseBinding, bindNonRec )
@@ -296,14 +296,12 @@ mkStringExprFS str
 \begin{code}
 
 mkIPBox :: IPName Id -> CoreExpr -> CoreExpr
-mkIPBox ipx e = Var (dataConWorkId (ipDataCon n)) `mkTyApps` [exprType e] `App` e
-  where n = fmap varName ipx
+mkIPBox ipx e = Var (dataConWorkId (ipDataCon (fmap (nameOccName . idName) ipx))) `mkTyApps` [exprType e] `App` e
 
 mkIPUnbox :: IPName Id -> CoreExpr
 mkIPUnbox ipx = Case (Var x) (mkWildValBinder (idType x)) (idType y)
-                     [(DataAlt (ipDataCon n), [y], Var y)]
-  where n = fmap varName ipx
-        x = ipNameName ipx
+                     [(DataAlt (ipDataCon (fmap (nameOccName . idName) ipx)), [y], Var y)]
+  where x = ipNameName ipx
         y = x `setIdType` case getIPPredTy_maybe (idType x) of
                 Just ty -> ty
                 Nothing -> pprPanic "mkIPUnbox" (ppr (idType x))

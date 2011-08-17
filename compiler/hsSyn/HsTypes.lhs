@@ -37,7 +37,7 @@ module HsTypes (
 
 import {-# SOURCE #-} HsExpr ( HsSplice, pprSplice )
 
-import NameSet( FreeVars )
+import NameSet ( FreeVars )
 import Type
 import HsDoc
 import BasicTypes

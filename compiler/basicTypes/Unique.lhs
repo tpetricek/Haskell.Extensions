@@ -46,8 +46,9 @@ module Unique (
 	mkPreludeMiscIdUnique, mkPreludeDataConUnique,
 	mkPreludeTyConUnique, mkPreludeClassUnique,
 	mkPArrDataConUnique,
+	mkIpTyConOccUnique, mkIpDataConOccUnique,
 
-        mkVarOccUnique, mkDataOccUnique, mkTvOccUnique, mkTcOccUnique,
+    mkVarOccUnique, mkDataOccUnique, mkTvOccUnique, mkTcOccUnique,
         mkRegSingleUnique, mkRegPairUnique, mkRegClassUnique, mkRegSubUnique,
 
 	mkBuiltinUnique,
@@ -339,6 +340,10 @@ mkTupleTyConUnique Unboxed a	= mkUnique '5' (3*a)
 mkPreludeDataConUnique i	= mkUnique '6' (2*i)	-- Must be alphabetic
 mkTupleDataConUnique Boxed a	= mkUnique '7' (2*a)	-- ditto (*may* be used in C labels)
 mkTupleDataConUnique Unboxed a	= mkUnique '8' (2*a)
+
+mkIpTyConOccUnique, mkIpDataConOccUnique :: FastString -> Unique
+mkIpTyConOccUnique	   fs = mkUnique 'm' (iBox (uniqueOfFS fs))
+mkIpDataConOccUnique   fs = mkUnique 'M' (iBox (uniqueOfFS fs))
 
 -- This one is used for a tiresome reason
 -- to improve a consistency-checking error check in the renamer

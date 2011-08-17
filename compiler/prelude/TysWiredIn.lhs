@@ -61,7 +61,7 @@ module TysWiredIn (
         eqTyCon_RDR, eqTyCon, eqTyConName, eqBoxDataCon,
 
         -- * Implicit parameter predicates
-        ipTyCon, ipDataCon
+        ipName, ipTyCon, ipDataCon
     ) where
 
 #include "HsVersions.h"
@@ -82,9 +82,8 @@ import TypeRep
 import RdrName
 import Name
 import BasicTypes       ( IPName(..), ipNameName, Arity, RecFlag(..), Boxity(..), isBoxed, HsBang(..) )
-import Unique           ( incrUnique, mkTupleTyConUnique,
+import Unique           ( incrUnique, mkIpTyConOccUnique, mkIpDataConOccUnique, mkTupleTyConUnique,
 			  mkTupleDataConUnique, mkPArrDataConUnique )
-import UniqSupply       ( mkMaskedUniqueGrimily )
 import Data.Array
 import FastString
 import Outputable
@@ -107,7 +106,8 @@ If you change which things are wired in, make sure you change their
 names in PrelNames, so they use wTcQual, wDataQual, etc
 
 \begin{code}
-wiredInTyCons :: [TyCon]	-- Excludes tuples
+wiredInTyCons :: [TyCon]	-- Excludes tuples, Any and implicit parameter TyCons
+                          -- (as a consequence, IfaceTyCon must represent them specially)
 -- This list is used only to define PrelInfo.wiredInThings
 
 -- It does not need to include kind constructors, because
@@ -127,6 +127,7 @@ wiredInTyCons = [ unitTyCon	-- Not treated like other tuples, because
     	      , intTyCon
     	      , listTyCon
 	      , parrTyCon
+              , eqTyCon
     	      ]
 \end{code}
 
@@ -323,38 +324,33 @@ unboxedPairDataCon = tupleCon   Unboxed 2
 %************************************************************************
 
 \begin{code}
--- We have a big hack here to make sure that we get implicit parameter
--- TyCon/DataCons which always have the same Uniques within one run of the
--- compiler. We reserve the 'P'  mask for our uniques, and set the integer
--- part to a hash of the name of the parameter.
-mkIPUnique :: IPName Name -> (OccName -> OccName) -> Unique
-mkIPUnique n f = mkMaskedUniqueGrimily 'P' (uniqueOfFS (occNameFS (f (nameOccName (ipNameName n)))))
+ipName :: OccName -> Name
+ipName = tyConName . ipTyCon . IPName
+
+ipTyCon :: IPName OccName -> TyCon
+ipTyCon = fst . ipTyDataCon
+
+ipDataCon :: IPName OccName -> DataCon
+ipDataCon = snd . ipTyDataCon
 
 -- I would kind of like to use a newtype TyCon here, but I imagine that
 -- that would cause problems because the corresponding coercion axiom would
 -- coerce between types of different kinds (Fact and *)..
 --
 -- Do it this way for now.
-ipTyCon :: IPName Name -> TyCon
-ipTyCon = fst . ipTyDataCon
-
-ipDataCon :: IPName Name -> DataCon
-ipDataCon = snd . ipTyDataCon
-
-ipTyDataCon :: IPName Name -> (TyCon, DataCon)
+ipTyDataCon :: IPName OccName -> (TyCon, DataCon)
 ipTyDataCon n = (tycon, datacon)
   where
-    -- Reuse the OccName generation for classes for now. May want to revisit this.
-    tycon_u    = mkIPUnique n mkClassTyConOcc
-    datacon_u  = mkIPUnique n mkClassDataConOcc
-    
-    tycon_name = mkPrimTc (fsLit ("?" ++ getOccString (ipNameName n))) tycon_u tycon
+    tycon_u   = mkIpTyConOccUnique   (occNameFS (ipNameName n))
+    datacon_u = mkIpDataConOccUnique (occNameFS (ipNameName n))
+
+    tycon_name = mkPrimTc (fsLit ("?" ++ occNameString (ipNameName n))) tycon_u tycon
     tycon      = mkAlgTyCon tycon_name
                    (argTypeKind `mkArrowKind` factKind)
                    [argAlphaTyVar]
                    []      -- No stupid theta
                    (DataTyCon [datacon] False)
-                   (IPTyCon n)
+                   (IPTyCon (IPName tycon_name))
                    NonRecursive
                    False
 

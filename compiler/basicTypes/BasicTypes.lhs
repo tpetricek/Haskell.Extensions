@@ -168,9 +168,7 @@ early in the hierarchy), but also in HsSyn.
 
 \begin{code}
 newtype IPName name = IPName name	-- ?x
-  deriving( Eq, Ord, Data, Typeable )
-  -- Ord is used in the IP name cache finite map
-  -- (used in HscTypes.OrigIParamCache)
+  deriving( Eq, Data, Typeable )
 
 instance Functor IPName where
     fmap = mapIPName

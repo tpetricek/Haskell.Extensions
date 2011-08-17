@@ -145,7 +145,7 @@ newEq ty1 ty2
 
 newIP :: IPName Name -> TcType -> TcM IpId
 newIP ip ty
-  = do 	{ name <- newName (getOccName (ipNameName ip))
+  = do 	{ name <- newName (nameOccName (ipNameName ip))
         ; return (mkLocalId name (mkIPPred ip ty)) }
 
 newDict :: Class -> [TcType] -> TcM DictId
@@ -156,7 +156,7 @@ newDict cls tys
 predTypeOccName :: PredType -> OccName
 predTypeOccName ty = case predTypePredTree ty of
     ClassPred cls _ -> mkDictOcc (getOccName cls)
-    IPPred ip _     -> getOccName (ipNameName ip)
+    IPPred ip _     -> nameOccName (ipNameName ip)
     EqPred _ _      -> mkVarOccFS (fsLit "cobox")
     TuplePred _     -> mkVarOccFS (fsLit "tup")
     IrredPred _     -> mkVarOccFS (fsLit "irred")

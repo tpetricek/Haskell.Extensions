@@ -2,7 +2,7 @@
 
 \begin{code}
 module IfaceEnv (
-	newGlobalBinder, newIPName, newImplicitBinder, 
+	newGlobalBinder, newImplicitBinder, 
 	lookupIfaceTop,
 	lookupOrig, lookupOrigNameCache, extendNameCache,
 	newIfaceName, newIfaceNames,
@@ -31,7 +31,6 @@ import Module
 import UniqFM
 import FastString
 import UniqSupply
-import BasicTypes
 import SrcLoc
 import MkId
 
@@ -39,7 +38,6 @@ import Outputable
 import Exception     ( evaluate )
 
 import Data.IORef    ( atomicModifyIORef, readIORef )
-import qualified Data.Map as Map
 \end{code}
 
 
@@ -147,22 +145,6 @@ lookupOrig mod occ
                     new_cache = extendNameCache (nsNames name_cache) mod occ name
                   in (name_cache{ nsUniqs = us, nsNames = new_cache }, name)
     }}}
-
-newIPName :: IPName OccName -> TcRnIf m n (IPName Name)
-newIPName occ_name_ip =
-  updNameCache $ \name_cache ->
-    let
-	ipcache = nsIPs name_cache
-        key = occ_name_ip  -- Ensures that ?x and %x get distinct Names
-    in
-    case Map.lookup key ipcache of
-      Just name_ip -> (name_cache, name_ip)
-      Nothing      -> (new_ns, name_ip)
-	  where
-	    (uniq, us') = takeUniqFromSupply (nsUniqs name_cache)
-	    name_ip     = mapIPName (mkIPName uniq) occ_name_ip
-	    new_ipcache = Map.insert key name_ip ipcache
-	    new_ns      = name_cache {nsUniqs = us', nsIPs = new_ipcache}
 \end{code}
 
 %************************************************************************
@@ -231,8 +213,7 @@ mkNameCacheUpdater = do
 initNameCache :: UniqSupply -> [Name] -> NameCache
 initNameCache us names
   = NameCache { nsUniqs = us,
-		nsNames = initOrigNames names,
-		nsIPs   = Map.empty }
+		nsNames = initOrigNames names }
 
 initOrigNames :: [Name] -> OrigNameCache
 initOrigNames names = foldl extendOrigNameCache emptyModuleEnv names

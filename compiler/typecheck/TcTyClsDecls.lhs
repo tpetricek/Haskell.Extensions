@@ -255,7 +255,8 @@ getInitialKind (L _ decl)
     mk_res_kind (TyData   { tcdKindSig = Just kind }) = return kind
 	-- On GADT-style declarations we allow a kind signature
 	--	data T :: *->* where { ... }
-    mk_res_kind _ = return liftedTypeKind
+    mk_res_kind (ClassDecl {}) = return factKind
+    mk_res_kind _              = return liftedTypeKind
 
 
 ----------------

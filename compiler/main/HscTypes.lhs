@@ -70,7 +70,7 @@ module HscTypes (
         -- * Information on imports and exports
 	WhetherHasOrphans, IsBootInterface, Usage(..), 
 	Dependencies(..), noDependencies,
-	NameCache(..), OrigNameCache, OrigIParamCache,
+	NameCache(..), OrigNameCache,
 	Avails, availsToNameSet, availsToNameEnv, availName, availNames,
 	AvailInfo(..),
 	IfaceExport, stableAvailCmp, 
@@ -134,7 +134,7 @@ import PrelNames	( gHC_PRIM )
 import Packages hiding ( Version(..) )
 import DynFlags
 import DriverPhases	( HscSource(..), isHsBoot, hscSourceString, Phase )
-import BasicTypes	( IPName, defaultFixity, WarningTxt(..) )
+import BasicTypes	( defaultFixity, WarningTxt(..) )
 import OptimizationFuel	( OptFuelState )
 import IfaceSyn
 import CoreSyn		( CoreRule, CoreVect )
@@ -157,7 +157,6 @@ import System.Time	( ClockTime )
 import Data.IORef
 import Data.Array       ( Array, array )
 import Data.List
-import Data.Map (Map)
 import Data.Word
 import Control.Monad    ( mplus, guard, liftM, when )
 import Exception
@@ -1619,17 +1618,12 @@ its binding site, we fix it up.
 data NameCache
  = NameCache {  nsUniqs :: UniqSupply,
 		-- ^ Supply of uniques
-		nsNames :: OrigNameCache,
+		nsNames :: OrigNameCache
 		-- ^ Ensures that one original name gets one unique
-		nsIPs   :: OrigIParamCache
-		-- ^ Ensures that one implicit parameter name gets one unique
    }
 
 -- | Per-module cache of original 'OccName's given 'Name's
 type OrigNameCache   = ModuleEnv (OccEnv Name)
-
--- | Module-local cache of implicit parameter 'OccName's given 'Name's
-type OrigIParamCache = Map (IPName OccName) (IPName Name)
 \end{code}
 
 
