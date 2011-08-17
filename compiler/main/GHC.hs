@@ -254,7 +254,7 @@ import NameSet
 import RdrName
 import qualified HsSyn -- hack as we want to reexport the whole module
 import HsSyn hiding ((<.>))
-import Type
+import Type     hiding( typeKind )
 import Coercion		( synTyConResKind )
 import TcType		hiding( typeKind )
 import Id

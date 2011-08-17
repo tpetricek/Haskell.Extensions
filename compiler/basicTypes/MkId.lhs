@@ -337,7 +337,7 @@ mkDataConIds wrap_name wkr_name data_con
     con_app _ rep_ids = wrapFamInstBody tycon res_ty_args $
                           Var wrk_id `mkTyApps`  res_ty_args
                                      `mkVarApps` ex_tvs                 
-                                     `mkCoApps`  map (mkReflCo . snd) eq_spec
+                                     `mkApps`  map (mkEqBox . mkReflCo . snd) eq_spec
                                      `mkVarApps` reverse rep_ids
 
     (ev_args,i2) = mkLocals 1  ev_tys

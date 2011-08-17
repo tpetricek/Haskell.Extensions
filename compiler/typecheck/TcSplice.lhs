@@ -38,6 +38,7 @@ import TcExpr
 import TcHsSyn
 import TcSimplify
 import TcUnify
+import Type
 import TcType
 import TcEnv
 import TcMType
@@ -980,7 +981,7 @@ lookupClassInstances c ts
         { rn_pred <- rnLPred doc rdr_pred	-- Rename
         ; kc_pred <- kcHsLPred rn_pred		-- Kind check
         ; pred <- dsHsLPred kc_pred	-- Type check
-        ; Just (cls, tys) <- getClassPredTys_maybe pred
+        ; Just (cls, tys) <- return $ getClassPredTys_maybe pred
 
 	-- Now look up instances
         ; inst_envs <- tcGetInstEnvs
@@ -1225,7 +1226,7 @@ reifyType ty@(ForAllTy _ _)        = reify_for_all ty
 reifyType (TyVarTy tv)	    = return (TH.VarT (reifyName tv))
 reifyType (TyConApp tc tys) = reify_tc_app tc tys   -- Do not expand type synonyms here
 reifyType (AppTy t1 t2)     = do { [r1,r2] <- reifyTypes [t1,t2] ; return (r1 `TH.AppT` r2) }
-reifyType (FunTy t1 t2)
+reifyType ty@(FunTy t1 t2)
   | isPredTy t1 = reify_for_all ty  -- Types like ((?x::Int) => Char -> Char)
   | otherwise   = do { [r1,r2] <- reifyTypes [t1,t2] ; return (TH.ArrowT `TH.AppT` r1 `TH.AppT` r2) }
 
@@ -1287,7 +1288,7 @@ reifyPred :: TypeRep.PredType -> TcM TH.Pred
 reifyPred ty = case predTypePredTree ty of
   ClassPred cls tys -> do { tys' <- reifyTypes tys 
                           ; return $ TH.ClassP (reifyName cls) tys' }
-  IPPred _ _        -> noTH (sLit "implicit parameters") (ppr p)
+  IPPred _ _        -> noTH (sLit "implicit parameters") (ppr ty)
   EqPred ty1 ty2    -> do { ty1' <- reifyType ty1
                           ; ty2' <- reifyType ty2
                           ; return $ TH.EqualP ty1' ty2'

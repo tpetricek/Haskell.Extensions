@@ -34,7 +34,6 @@ import Linker
 import DataCon
 import Type
 import qualified Unify as U
-import TypeRep         -- I know I know, this is cheating
 import Var
 import TcRnMonad
 import TcType
