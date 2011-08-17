@@ -236,10 +236,10 @@ buildClass :: Bool		-- True <=> do not include unfoldings
 	   -> RecFlag			   -- Info for type constructor
 	   -> TcRnIf m n Class
 
-buildClass no_unf class_name tvs sc_theta fds ats sig_stuff tc_isrec
+buildClass no_unf tycon_name tvs sc_theta fds ats sig_stuff tc_isrec
   = do	{ traceIf (text "buildClass")
-	; tycon_name <- newImplicitBinder class_name mkClassTyConOcc
-	; datacon_name <- newImplicitBinder class_name mkClassDataConOcc
+	; class_name <- newImplicitBinder tycon_name mkClassClassOcc
+	; datacon_name <- newImplicitBinder tycon_name mkClassDataConOcc
 		-- The class name is the 'parent' for this datacon, not its tycon,
 		-- because one should import the class to get the binding for 
 		-- the datacon
@@ -250,7 +250,7 @@ buildClass no_unf class_name tvs sc_theta fds ats sig_stuff tc_isrec
 	  		-- Build the selector id and default method id
 
 	      -- Make selectors for the superclasses 
-	; sc_sel_names <- mapM  (newImplicitBinder class_name . mkSuperDictSelOcc) 
+	; sc_sel_names <- mapM  (newImplicitBinder tycon_name . mkSuperDictSelOcc) 
 				[1..length sc_theta]
         ; let sc_sel_ids = [ mkDictSelId no_unf sc_name rec_clas 
                            | sc_name <- sc_sel_names]

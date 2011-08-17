@@ -51,7 +51,7 @@ module OccName (
 	mkDataConWrapperOcc, mkWorkerOcc, mkDefaultMethodOcc, mkGenDefMethodOcc,
 	mkDerivedTyConOcc, mkNewTyCoOcc, mkClassOpAuxOcc,
         mkCon2TagOcc, mkTag2ConOcc, mkMaxTagOcc,
-  	mkClassTyConOcc, mkClassDataConOcc, mkDictOcc, mkIPOcc, 
+  	mkClassClassOcc, mkClassDataConOcc, mkDictOcc, mkIPOcc, 
  	mkSpecOcc, mkForeignExportOcc, mkGenOcc1, mkGenOcc2,
  	mkGenD, mkGenR, mkGenRCo, mkGenC, mkGenS,
 	mkDataTOcc, mkDataCOcc, mkDataConWorkerOcc,
@@ -541,7 +541,7 @@ isDerivedOccName occ =
 
 \begin{code}
 mkDataConWrapperOcc, mkWorkerOcc, mkDefaultMethodOcc, mkGenDefMethodOcc,
-  	mkDerivedTyConOcc, mkClassTyConOcc, mkClassDataConOcc, mkDictOcc,
+  	mkDerivedTyConOcc, mkClassClassOcc, mkClassDataConOcc, mkDictOcc,
  	mkIPOcc, mkSpecOcc, mkForeignExportOcc, mkGenOcc1, mkGenOcc2,
  	mkGenD, mkGenR, mkGenRCo,
 	mkDataTOcc, mkDataCOcc, mkDataConWorkerOcc, mkNewTyCoOcc,
@@ -558,7 +558,7 @@ mkDefaultMethodOcc  = mk_simple_deriv varName  "$dm"
 mkGenDefMethodOcc   = mk_simple_deriv varName  "$gdm"
 mkClassOpAuxOcc     = mk_simple_deriv varName  "$c"
 mkDerivedTyConOcc   = mk_simple_deriv tcName   ":"	-- The : prefix makes sure it classifies
-mkClassTyConOcc     = mk_simple_deriv tcName   "T:"	-- as a tycon/datacon
+mkClassClassOcc     = mk_simple_deriv tcName   "C:"	-- as a tycon/datacon
 mkClassDataConOcc   = mk_simple_deriv dataName "D:"	-- We go straight to the "real" data con
 							-- for datacons from classes
 mkDictOcc	    = mk_simple_deriv varName  "$d"
