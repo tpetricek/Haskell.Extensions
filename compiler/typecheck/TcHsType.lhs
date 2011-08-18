@@ -650,8 +650,8 @@ dsHsLPred pred = dsHsPred (unLoc pred)
 dsHsPred :: HsPred Name -> TcM PredType
 dsHsPred (HsClassP class_name tys)
   = do { arg_tys <- dsHsTypes tys
-       ; clas <- tcLookupClass class_name
-       ; return (mkClassPred clas arg_tys)
+       ; clas_tc <- tcLookupTyCon class_name
+       ; return (mkTyConApp clas_tc arg_tys)
        }
 dsHsPred (HsEqualP ty1 ty2)
   = do { arg_ty1 <- dsHsType ty1
