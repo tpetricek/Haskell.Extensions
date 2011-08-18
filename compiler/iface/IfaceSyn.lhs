@@ -85,7 +85,7 @@ data IfaceDecl
     }
 
   | IfaceClass { ifCtxt    :: IfaceContext,     -- Context...
-                 ifName    :: OccName,          -- Name of the class
+                 ifName    :: OccName,          -- Name of the class TyCon
                  ifTyVars  :: [IfaceTvBndr],    -- Type variables
                  ifFDs     :: [FunDep FastString], -- Functional dependencies
                  ifATs     :: [IfaceDecl],      -- Associated type families
@@ -372,7 +372,7 @@ ifaceDeclSubBndrs (IfaceData {ifName = tc_occ,
           has_wrapper = ifConWrapper con_decl     -- This is the reason for
                                                   -- having the ifConWrapper field!
 
-ifaceDeclSubBndrs (IfaceClass {ifCtxt = sc_ctxt, ifName = cls_occ,
+ifaceDeclSubBndrs (IfaceClass {ifCtxt = sc_ctxt, ifName = tc_occ,
                                ifSigs = sigs, ifATs = ats })
   = -- dictionary datatype:
     --   type constructor
@@ -392,11 +392,11 @@ ifaceDeclSubBndrs (IfaceClass {ifCtxt = sc_ctxt, ifName = cls_occ,
   where
     n_ctxt = length sc_ctxt
     n_sigs = length sigs
-    tc_occ  = mkClassTyConOcc cls_occ
-    dc_occ  = mkClassDataConOcc cls_occ
     co_occs | is_newtype = [mkNewTyCoOcc tc_occ]
             | otherwise  = []
     dcww_occ = mkDataConWorkerOcc dc_occ
+    cls_occ = mkClassClassOcc tc_occ
+    dc_occ = mkClassDataConOcc tc_occ
     is_newtype = n_sigs + n_ctxt == 1 -- Sigh
 
 ifaceDeclSubBndrs (IfaceSyn {ifName = tc_occ,

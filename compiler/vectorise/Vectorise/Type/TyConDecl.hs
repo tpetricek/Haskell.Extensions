@@ -52,7 +52,7 @@ vectTyConDecl tycon
             cls'     <- liftDs 
              	    $  buildClass
                              False               -- include unfoldings on dictionary selectors.
-                             name'               -- new name  V_T:Class
+                             name'               -- new name  :V_Class
                              (tyConTyVars tycon) -- keep original type vars
                              []                  -- no stupid theta
                              []                  -- no functional dependencies

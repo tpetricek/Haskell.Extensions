@@ -535,7 +535,7 @@ tcTyClDecl1 _parent calc_isrec
             -- NB: 'ats' only contains "type family" and "data family"
             --     declarations as well as type family defaults
             ; buildClass False {- Must include unfoldings for selectors -}
-			 class_name tvs' ctxt' fds' (concat atss')
+			 tycon_name tvs' ctxt' fds' (concat atss')
 			 sig_stuff tc_isrec }
 
   ; let gen_dm_ids = [ AnId (mkExportedLocalId gen_dm_name gen_dm_ty)

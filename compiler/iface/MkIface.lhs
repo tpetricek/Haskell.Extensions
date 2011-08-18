@@ -1325,7 +1325,7 @@ tyThingToIfaceDecl (AnId id)
 
 tyThingToIfaceDecl (AClass clas)
   = IfaceClass { ifCtxt	  = toIfaceContext sc_theta,
-		 ifName	  = getOccName clas,
+		 ifName	  = getOccName (classTyCon clas),
 		 ifTyVars = toIfaceTvBndrs clas_tyvars,
 		 ifFDs    = map toIfaceFD clas_fds,
 		 ifATs	  = map (tyThingToIfaceDecl . ATyCon) clas_ats,
