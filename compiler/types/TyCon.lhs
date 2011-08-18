@@ -1138,8 +1138,7 @@ isAnyTyCon _              = False
 isImplicitTyCon :: TyCon -> Bool
 isImplicitTyCon tycon | isTyConAssoc tycon           = True
 		      | isSynTyCon tycon	     = False
-		      | isAlgTyCon tycon	     = isClassTyCon tycon ||
-						       isTupleTyCon tycon
+		      | isAlgTyCon tycon	     = isTupleTyCon tycon
 isImplicitTyCon _other                               = True
         -- catches: FunTyCon, PrimTyCon, 
         -- CoTyCon, SuperKindTyCon

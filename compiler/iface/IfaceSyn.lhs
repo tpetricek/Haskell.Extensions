@@ -374,10 +374,7 @@ ifaceDeclSubBndrs (IfaceData {ifName = tc_occ,
 
 ifaceDeclSubBndrs (IfaceClass {ifCtxt = sc_ctxt, ifName = cls_tc_occ,
                                ifSigs = sigs, ifATs = ats })
-  = -- dictionary datatype:
-    --   type constructor
-    cls_tc_occ :
-    --   (possibly) newtype coercion
+  = --   (possibly) newtype coercion
     co_occs ++
     --    data constructor (DataCon namespace)
     --    data worker (Id namespace)

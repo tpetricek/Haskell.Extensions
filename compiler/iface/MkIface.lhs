@@ -1324,6 +1324,9 @@ tyThingToIfaceDecl (AnId id)
 	      ifIdInfo    = toIfaceIdInfo (idInfo id) }
 
 tyThingToIfaceDecl (ATyCon tycon)
+  | Just clas <- tyConClass_maybe tycon
+  = classToIfaceDecl clas
+
   | isSynTyCon tycon
   = IfaceSyn {	ifName    = getOccName tycon,
 		ifTyVars  = toIfaceTvBndrs tyvars,
@@ -1344,9 +1347,6 @@ tyThingToIfaceDecl (ATyCon tycon)
   | isForeignTyCon tycon
   = IfaceForeign { ifName    = getOccName tycon,
 	    	   ifExtName = tyConExtName tycon }
-
-  | Just clas <- tyConClass_maybe tycon
-  = classToIfaceDecl clas
 
   | otherwise = pprPanic "toIfaceDecl" (ppr tycon)
   where
