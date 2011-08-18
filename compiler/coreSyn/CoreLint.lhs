@@ -282,7 +282,7 @@ lintCoreExpr (Let (Rec pairs) body)
     (_, dups) = removeDups compare bndrs
 
 lintCoreExpr e@(App _ _)
-    | Var x <- fun -- Greivous hack for EqBox construction: EqBox may have type arguments
+    | Var x <- fun -- Greivous hack for Eq# construction: Eq# may have type arguments
                    -- of kind (* -> *) but its type insists on *. When we have polymorphic kinds,
                    -- we should do this properly
     , Just dc <- isDataConWorkId_maybe x
@@ -734,7 +734,7 @@ lintType ty@(FunTy t1 t2)
   = lint_ty_app ty (tyConKind funTyCon) [t1,t2]
 
 lintType ty@(TyConApp tc tys)
-  | tc `hasKey` eqPrimTyConKey	-- See Note [The Eq# TyCon] in TysPrim
+  | tc `hasKey` eqPrimTyConKey	-- See Note [The ~# TyCon] in TysPrim
   = lint_prim_eq_pred ty tys
   | tc `hasKey` eqTyConKey
   = lint_eq_pred ty tys
@@ -776,7 +776,7 @@ lint_prim_eq_pred ty arg_tys
                 (ptext (sLit "Mismatched arg kinds:") <+> ppr ty)
        ; return unliftedTypeKind }
   | otherwise
-  = failWithL (ptext (sLit "Unsaturated Eq# type") <+> ppr ty)
+  = failWithL (ptext (sLit "Unsaturated ~# type") <+> ppr ty)
 
 ----------------
 check_co_app :: Coercion -> Kind -> [OutType] -> LintM ()
@@ -1149,7 +1149,7 @@ mkStrictMsg binder
 
 mkEqBoxKindErrMsg :: Type -> Type -> Message
 mkEqBoxKindErrMsg ty1 ty2
-  = vcat [ptext (sLit "Kinds don't match in type arguments of EqBox:"),
+  = vcat [ptext (sLit "Kinds don't match in type arguments of Eq#:"),
           hang (ptext (sLit "Arg type 1:"))   
                  4 (ppr ty1 <+> dcolon <+> ppr (typeKind ty1)),
           hang (ptext (sLit "Arg type 2:"))   

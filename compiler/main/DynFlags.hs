@@ -382,7 +382,7 @@ data ExtensionFlag
    | Opt_NPlusKPatterns
    | Opt_DoAndIfThenElse
    | Opt_RebindableSyntax
-   | Opt_FactKind
+   | Opt_ConstraintKind
    
    | Opt_StandaloneDeriving
    | Opt_DeriveDataTypeable
@@ -1864,7 +1864,7 @@ xFlags = [
   ( "NPlusKPatterns",                   AlwaysAllowed, Opt_NPlusKPatterns, nop ),
   ( "DoAndIfThenElse",                  AlwaysAllowed, Opt_DoAndIfThenElse, nop ),
   ( "RebindableSyntax",                 AlwaysAllowed, Opt_RebindableSyntax, nop ),
-  ( "FactKind",                         AlwaysAllowed, Opt_FactKind, nop ),
+  ( "ConstraintKind",                   AlwaysAllowed, Opt_ConstraintKind, nop ),
   ( "MonoPatBinds",                     AlwaysAllowed, Opt_MonoPatBinds, nop ),
   ( "ExplicitForAll",                   AlwaysAllowed, Opt_ExplicitForAll, nop ),
   ( "AlternativeLayoutRule",            AlwaysAllowed, Opt_AlternativeLayoutRule, nop ),

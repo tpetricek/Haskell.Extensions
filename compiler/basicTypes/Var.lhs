@@ -103,7 +103,7 @@ type EqVar  = EvId      -- Boxed equality evidence
 type TyVar = Var
 type CoVar = Id		-- A coercion variable is simply an Id
 			-- variable of kind @#@. Its
-			-- 'varType' is always @Eq# ty1 ty2@
+			-- 'varType' is always @ty1 ~# ty2@
 \end{code}
 
 %************************************************************************

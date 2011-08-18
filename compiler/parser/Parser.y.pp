@@ -1737,6 +1737,7 @@ gtycon 	:: { Located RdrName }	-- A "general" qualified tycon
 	| '(' '->' ')'			{ LL $ getRdrName funTyCon }
 	| '[' ']'			{ LL $ listTyCon_RDR }
 	| '[:' ':]'			{ LL $ parrTyCon_RDR }
+	| '(' '~' '#' ')'   		{ LL $ getRdrName eqPrimTyCon }
 
 oqtycon :: { Located RdrName }	-- An "ordinary" qualified tycon
 	: qtycon			{ $1 }

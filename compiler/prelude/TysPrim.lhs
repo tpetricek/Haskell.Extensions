@@ -64,7 +64,7 @@ module TysPrim(
 	int64PrimTyCon,		int64PrimTy,
         word64PrimTyCon,        word64PrimTy,
 
-        eqPrimTyCon,            -- Eq# ty1 ty2
+        eqPrimTyCon,            -- ty1 ~# ty2
 
 	-- * Any
 	anyTyCon, anyTyConOfKind, anyTypeOfKind
@@ -142,7 +142,7 @@ addrPrimTyConName    	      = mkPrimTc (fsLit "Addr#") addrPrimTyConKey addrPrim
 floatPrimTyConName   	      = mkPrimTc (fsLit "Float#") floatPrimTyConKey floatPrimTyCon
 doublePrimTyConName  	      = mkPrimTc (fsLit "Double#") doublePrimTyConKey doublePrimTyCon
 statePrimTyConName            = mkPrimTc (fsLit "State#") statePrimTyConKey statePrimTyCon
-eqPrimTyConName               = mkPrimTc (fsLit "Eq#") eqPrimTyConKey eqPrimTyCon
+eqPrimTyConName               = mkPrimTc (fsLit "~#") eqPrimTyConKey eqPrimTyCon
 realWorldTyConName            = mkPrimTc (fsLit "RealWorld") realWorldTyConKey realWorldTyCon
 arrayPrimTyConName   	      = mkPrimTc (fsLit "Array#") arrayPrimTyConKey arrayPrimTyCon
 byteArrayPrimTyConName	      = mkPrimTc (fsLit "ByteArray#") byteArrayPrimTyConKey byteArrayPrimTyCon
@@ -270,7 +270,7 @@ openTypeKindTyConName     = mkPrimTyConName (fsLit "?") openTypeKindTyConKey ope
 unliftedTypeKindTyConName = mkPrimTyConName (fsLit "#") unliftedTypeKindTyConKey unliftedTypeKindTyCon
 ubxTupleKindTyConName     = mkPrimTyConName (fsLit "(#)") ubxTupleKindTyConKey ubxTupleKindTyCon
 argTypeKindTyConName      = mkPrimTyConName (fsLit "??") argTypeKindTyConKey argTypeKindTyCon
-factKindTyConName         = mkPrimTyConName (fsLit "Fact") factKindTyConKey factKindTyCon
+factKindTyConName         = mkPrimTyConName (fsLit "Constraint") factKindTyConKey factKindTyCon
 
 mkPrimTyConName :: FastString -> Unique -> TyCon -> Name
 mkPrimTyConName occ key tycon = mkWiredInName gHC_PRIM (mkTcOccFS occ) 
@@ -387,18 +387,18 @@ doublePrimTyCon	= pcPrimTyCon0 doublePrimTyConName DoubleRep
 %*									*
 %************************************************************************
 
-Note [The Eq# TyCon)
+Note [The ~# TyCon)
 ~~~~~~~~~~~~~~~~~~~~
-There is a perfectly ordinary type constructor Eq# that represents the type
+There is a perfectly ordinary type constructor ~# that represents the type
 of coercions (which, remember, are values).  For example
-   Refl Int :: Eq# Int Int
+   Refl Int :: ~# Int Int
 
 Atcually it is not quite "perfectly ordinary" because it is kind-polymorphic:
-   Refl Maybe :: Eq# Maybe Maybe
+   Refl Maybe :: ~# Maybe Maybe
 
-So the true kind of Eq# :: forall k. k -> k -> #.  But we don't have
+So the true kind of ~# :: forall k. k -> k -> #.  But we don't have
 polymorphic kinds (yet). However, (~) really only appears saturated in
-which case there is no problem in finding the kind of (Eq# ty1 ty2). So
+which case there is no problem in finding the kind of (ty1 ~# ty2). So
 we check that in CoreLint (and, in an assertion, in Kind.typeKind).
 
 Note [The State# TyCon]
@@ -420,7 +420,7 @@ statePrimTyCon :: TyCon   -- See Note [The State# TyCon]
 statePrimTyCon	 = pcPrimTyCon statePrimTyConName 1 VoidRep
 
 eqPrimTyCon :: TyCon  -- The representation type for equality predicates
-		      -- See Note [The (Eq#) TyCon]
+		      -- See Note [The ~# TyCon]
 eqPrimTyCon  = pcPrimTyCon eqPrimTyConName 2 VoidRep
 \end{code}
 

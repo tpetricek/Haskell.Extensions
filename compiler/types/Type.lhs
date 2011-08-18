@@ -1496,8 +1496,8 @@ typeKind ty@(TyConApp tc tys)
 
   | otherwise
   = ASSERT2( not (tc `hasKey` eqPrimTyConKey) || length tys == 2, ppr ty )
-             -- Assertion checks for unsaturated application of Eq#
-             -- See Note [The Eq# TyCon] in TysPrim
+             -- Assertion checks for unsaturated application of ~#
+             -- See Note [The ~# TyCon] in TysPrim
     kindAppResult (tyConKind tc) tys
 
 typeKind (AppTy fun _)        = kindFunResult (typeKind fun)

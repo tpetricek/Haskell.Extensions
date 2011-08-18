@@ -1148,14 +1148,14 @@ check_pred_ty' _ SigmaCtxt (IPPred _ ty) = checkValidMonoType ty
 	-- instance decl would show up two uses of ?x.
 
 check_pred_ty' dflags ctxt t@(TuplePred ts)
-  | xopt Opt_FactKind dflags = mapM_ (check_pred_ty' dflags ctxt) ts
-  | otherwise                = failWithTc (predTupleErr (predTreePredType t) $$ how_to_allow)
-  where how_to_allow = parens (ptext (sLit "Use -XFactKind to permit this"))
+  | xopt Opt_ConstraintKind dflags = mapM_ (check_pred_ty' dflags ctxt) ts
+  | otherwise                      = failWithTc (predTupleErr (predTreePredType t) $$ how_to_allow)
+  where how_to_allow = parens (ptext (sLit "Use -XConstraintKind to permit this"))
 
 check_pred_ty' dflags _ (IrredPred pred)
-  | xopt Opt_FactKind dflags = return ()
-  | otherwise                = failWithTc (predIrredErr pred $$ how_to_allow)
-  where how_to_allow = parens (ptext (sLit "Use -XFactKind to permit this"))
+  | xopt Opt_ConstraintKind dflags = return ()
+  | otherwise                      = failWithTc (predIrredErr pred $$ how_to_allow)
+  where how_to_allow = parens (ptext (sLit "Use -XConstraintKind to permit this"))
 
 -- Catch-all
 check_pred_ty' _ _ t  = failWithTc (badPredTyErr (predTreePredType t))
