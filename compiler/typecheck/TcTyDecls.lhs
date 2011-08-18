@@ -22,7 +22,6 @@ import RnHsSyn
 import Type
 import HscTypes
 import TyCon
-import Class
 import DataCon
 import Name
 import NameEnv
