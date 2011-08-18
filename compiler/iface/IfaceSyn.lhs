@@ -372,11 +372,11 @@ ifaceDeclSubBndrs (IfaceData {ifName = tc_occ,
           has_wrapper = ifConWrapper con_decl     -- This is the reason for
                                                   -- having the ifConWrapper field!
 
-ifaceDeclSubBndrs (IfaceClass {ifCtxt = sc_ctxt, ifName = tc_occ,
+ifaceDeclSubBndrs (IfaceClass {ifCtxt = sc_ctxt, ifName = cls_tc_occ,
                                ifSigs = sigs, ifATs = ats })
   = -- dictionary datatype:
     --   type constructor
-    tc_occ :
+    cls_tc_occ :
     --   (possibly) newtype coercion
     co_occs ++
     --    data constructor (DataCon namespace)
@@ -386,17 +386,16 @@ ifaceDeclSubBndrs (IfaceClass {ifCtxt = sc_ctxt, ifName = tc_occ,
     -- associated types
     [ifName at | at <- ats ] ++
     -- superclass selectors
-    [mkSuperDictSelOcc n cls_occ | n <- [1..n_ctxt]] ++
+    [mkSuperDictSelOcc n cls_tc_occ | n <- [1..n_ctxt]] ++
     -- operation selectors
     [op | IfaceClassOp op  _ _ <- sigs]
   where
     n_ctxt = length sc_ctxt
     n_sigs = length sigs
-    co_occs | is_newtype = [mkNewTyCoOcc tc_occ]
+    co_occs | is_newtype = [mkNewTyCoOcc cls_tc_occ]
             | otherwise  = []
     dcww_occ = mkDataConWorkerOcc dc_occ
-    cls_occ = mkClassClassOcc tc_occ
-    dc_occ = mkClassDataConOcc tc_occ
+    dc_occ = mkClassDataConOcc cls_tc_occ
     is_newtype = n_sigs + n_ctxt == 1 -- Sigh
 
 ifaceDeclSubBndrs (IfaceSyn {ifName = tc_occ,

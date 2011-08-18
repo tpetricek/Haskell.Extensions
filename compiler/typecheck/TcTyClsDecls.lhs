@@ -517,25 +517,21 @@ tcTyClDecl1 _parent calc_isrec
     h98_syntax = consUseH98Syntax cons
 
 tcTyClDecl1 _parent calc_isrec 
-  (ClassDecl {tcdLName = L _ class_name, tcdTyVars = tvs, 
+  (ClassDecl {tcdLName = L _ class_tycon_name, tcdTyVars = tvs, 
 	      tcdCtxt = ctxt, tcdMeths = meths,
 	      tcdFDs = fundeps, tcdSigs = sigs, tcdATs = ats} )
   = ASSERT( isNoParent _parent )
     tcTyVarBndrs tvs		$ \ tvs' -> do 
   { ctxt' <- tcHsKindedContext ctxt
   ; fds' <- mapM (addLocM tc_fundep) fundeps
-  ; (sig_stuff, gen_dm_env) <- tcClassSigs class_name sigs meths
+  ; (sig_stuff, gen_dm_env) <- tcClassSigs class_tycon_name sigs meths
   ; clas <- fixM $ \ clas -> do
-	    { let 	-- This little knot is just so we can get
-			-- hold of the name of the class TyCon, which we
-			-- need to look up its recursiveness
-		    tycon_name = tyConName (classTyCon clas)
-		    tc_isrec = calc_isrec tycon_name
+	    { let tc_isrec = calc_isrec class_tycon_name
 	    ; atss' <- mapM (addLocM $ tcTyClDecl1 (AssocFamilyTyCon clas) (const Recursive)) ats
             -- NB: 'ats' only contains "type family" and "data family"
             --     declarations as well as type family defaults
             ; buildClass False {- Must include unfoldings for selectors -}
-			 tycon_name tvs' ctxt' fds' (concat atss')
+			 class_tycon_name tvs' ctxt' fds' (concat atss')
 			 sig_stuff tc_isrec }
 
   ; let gen_dm_ids = [ AnId (mkExportedLocalId gen_dm_name gen_dm_ty)

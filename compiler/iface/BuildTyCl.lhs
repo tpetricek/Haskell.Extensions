@@ -237,9 +237,10 @@ buildClass :: Bool		-- True <=> do not include unfoldings
 	   -> TcRnIf m n Class
 
 buildClass no_unf tycon_name tvs sc_theta fds ats sig_stuff tc_isrec
-  = do	{ traceIf (text "buildClass")
-	; class_name <- newImplicitBinder tycon_name mkClassClassOcc
+  = do	{ traceIf (text "buildClass0")
+        ; traceIf (text "buildClass1" <+> ppr tycon_name)
 	; datacon_name <- newImplicitBinder tycon_name mkClassDataConOcc
+        ; traceIf (text "buildClass3" <+> ppr datacon_name)
 		-- The class name is the 'parent' for this datacon, not its tycon,
 		-- because one should import the class to get the binding for 
 		-- the datacon
@@ -309,7 +310,7 @@ buildClass no_unf tycon_name tvs sc_theta fds ats sig_stuff tc_isrec
 		-- type]
 	      ; atTyCons = [tycon | ATyCon tycon <- ats]
 
-	      ; result = mkClass class_name tvs fds 
+	      ; result = mkClass tvs fds 
 			         sc_theta sc_sel_ids atTyCons
 				 op_items tycon
 	      }

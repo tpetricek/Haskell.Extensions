@@ -51,7 +51,7 @@ module OccName (
 	mkDataConWrapperOcc, mkWorkerOcc, mkDefaultMethodOcc, mkGenDefMethodOcc,
 	mkDerivedTyConOcc, mkNewTyCoOcc, mkClassOpAuxOcc,
         mkCon2TagOcc, mkTag2ConOcc, mkMaxTagOcc,
-  	mkClassClassOcc, mkClassDataConOcc, mkDictOcc, mkIPOcc, 
+  	mkClassDataConOcc, mkDictOcc, mkIPOcc, 
  	mkSpecOcc, mkForeignExportOcc, mkGenOcc1, mkGenOcc2,
  	mkGenD, mkGenR, mkGenRCo, mkGenC, mkGenS,
 	mkDataTOcc, mkDataCOcc, mkDataConWorkerOcc,
@@ -541,7 +541,7 @@ isDerivedOccName occ =
 
 \begin{code}
 mkDataConWrapperOcc, mkWorkerOcc, mkDefaultMethodOcc, mkGenDefMethodOcc,
-  	mkDerivedTyConOcc, mkClassClassOcc, mkClassDataConOcc, mkDictOcc,
+  	mkDerivedTyConOcc, mkClassDataConOcc, mkDictOcc,
  	mkIPOcc, mkSpecOcc, mkForeignExportOcc, mkGenOcc1, mkGenOcc2,
  	mkGenD, mkGenR, mkGenRCo,
 	mkDataTOcc, mkDataCOcc, mkDataConWorkerOcc, mkNewTyCoOcc,
@@ -557,8 +557,7 @@ mkWorkerOcc         = mk_simple_deriv varName  "$w"
 mkDefaultMethodOcc  = mk_simple_deriv varName  "$dm"
 mkGenDefMethodOcc   = mk_simple_deriv varName  "$gdm"
 mkClassOpAuxOcc     = mk_simple_deriv varName  "$c"
-mkDerivedTyConOcc   = mk_simple_deriv tcName   ":"	-- The : prefix makes sure it classifies
-mkClassClassOcc     = mk_simple_deriv tcName   "C:"	-- as a tycon/datacon
+mkDerivedTyConOcc   = mk_simple_deriv tcName   ":"	-- The : prefix makes sure it classifies as a tycon/datacon
 mkClassDataConOcc   = mk_simple_deriv dataName "D:"	-- We go straight to the "real" data con
 							-- for datacons from classes
 mkDictOcc	    = mk_simple_deriv varName  "$d"
@@ -620,8 +619,8 @@ mkDataConWorkerOcc datacon_occ = setOccNameSpace varName datacon_occ
 mkSuperDictSelOcc :: Int 	-- ^ Index of superclass, e.g. 3
 		  -> OccName 	-- ^ Class, e.g. @Ord@
 		  -> OccName	-- ^ Derived 'Occname', e.g. @$p3Ord@
-mkSuperDictSelOcc index cls_occ
-  = mk_deriv varName "$p" (show index ++ occNameString cls_occ)
+mkSuperDictSelOcc index cls_tc_occ
+  = mk_deriv varName "$p" (show index ++ occNameString cls_tc_occ)
 
 mkLocalOcc :: Unique 		-- ^ Unique to combine with the 'OccName'
 	   -> OccName		-- ^ Local name, e.g. @sat@
