@@ -1483,7 +1483,7 @@ typeKind ty@(TyConApp tc tys)
   , tyConArity tc == length tys
   = case tys of
       []       -> liftedTypeKind -- FIXME: can't write nullary facts!!
-      (ty:tys) -> ASSERT(all (\ty -> typeKind ty == k) tys) k
+      (ty:tys) -> ASSERT(all (\ty -> typeKind ty `eqKind` k) tys) k
         where k = typeKind ty
 
   | otherwise

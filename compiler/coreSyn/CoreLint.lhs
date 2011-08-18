@@ -742,12 +742,12 @@ lintType ty@(TyConApp tc tys)
   , tyConArity tc == length tys
   , not (null tys)
   = do { (k:ks) <- mapM lintType tys
-       ; unless (all (== k) ks) $ 
+       ; unless (all (`eqKind` k) ks) $ 
            addErrL (sep [ ptext (sLit "Kind mis-match in saturated boxed tuple:")
                         , nest 2 (ptext (sLit "First argument kind:") <+> ppr k $$
                                   ptext (sLit "Other arguments kinds:") <+> ppr ks) ])
        ; unless (isLiftedTypeKind k || isFactKind k) $
-           addErrL (ptext (sLit "Boxed tuple arguments have invalid kind" <+> ppr k))
+           addErrL (ptext (sLit "Boxed tuple arguments have invalid kind") <+> ppr k)
        ; return k }
   | tyConHasKind tc
   = lint_ty_app ty (tyConKind tc) tys

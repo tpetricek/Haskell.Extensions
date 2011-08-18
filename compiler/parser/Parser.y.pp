@@ -32,6 +32,7 @@ import RdrHsSyn
 import HscTypes		( IsBootInterface, WarningTxt(..) )
 import Lexer
 import RdrName
+import TysPrim		( eqPrimTyCon )
 import TysWiredIn	( unitTyCon, unitDataCon, tupleTyCon, tupleCon, nilDataCon,
 			  unboxedSingletonTyCon, unboxedSingletonDataCon,
 			  listTyCon_RDR, parrTyCon_RDR, consDataCon_RDR, eqTyCon_RDR )
@@ -278,6 +279,7 @@ incorrect.
  '->'		{ L _ ITrarrow }
  '@'		{ L _ ITat }
  '~'		{ L _ ITtilde }
+ '~#'		{ L _ ITtildehsh }
  '=>'		{ L _ ITdarrow }
  '-'		{ L _ ITminus }
  '!'		{ L _ ITbang }
@@ -1737,7 +1739,7 @@ gtycon 	:: { Located RdrName }	-- A "general" qualified tycon
 	| '(' '->' ')'			{ LL $ getRdrName funTyCon }
 	| '[' ']'			{ LL $ listTyCon_RDR }
 	| '[:' ':]'			{ LL $ parrTyCon_RDR }
-	| '(' '~' '#' ')'   		{ LL $ getRdrName eqPrimTyCon }
+	| '(' '~#' ')'   		{ LL $ getRdrName eqPrimTyCon }
 
 oqtycon :: { Located RdrName }	-- An "ordinary" qualified tycon
 	: qtycon			{ $1 }
