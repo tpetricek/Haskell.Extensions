@@ -1477,22 +1477,14 @@ type SimpleKind = Kind
 %************************************************************************
 
 \begin{code}
-theBy :: (a -> a -> Bool) -> [a] -> Maybe a
-theBy _  []     = error "the: must supply at least one argument"
-theBy eq (x:xs) = go x xs
-  where go x []     = Just x
-        go x (y:ys) | x `eq` y  = go x ys
-                    | otherwise = Nothing
-
 typeKind :: Type -> Kind
 typeKind ty@(TyConApp tc tys) 
   | isBoxedTupleTyCon tc
   , tyConArity tc == length tys
-  = if null tys
-    then liftedTypeKind -- FIXME: can't write nullary facts!!
-    else case theBy eqKind (map typeKind tys) of
-           Just k  -> k
-           Nothing -> pprPanic "typeKind: insane tuple kinds" (ppr ty)
+  = case tys of
+      []       -> liftedTypeKind -- FIXME: can't write nullary facts!!
+      (ty:tys) -> ASSERT(all (\ty -> typeKind ty == k) tys) k
+        where k = typeKind ty
 
   | otherwise
   = ASSERT2( not (tc `hasKey` eqPrimTyConKey) || length tys == 2, ppr ty )
