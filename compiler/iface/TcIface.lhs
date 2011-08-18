@@ -481,7 +481,7 @@ tc_iface_decl _parent ignore_prags
     ; cls  <- fixM $ \ cls -> do
               { ats  <- mapM (tc_iface_decl (AssocFamilyTyCon cls) ignore_prags) rdr_ats
               ; buildClass ignore_prags tc_name tyvars ctxt fds ats sigs tc_isrec }
-    ; return (AClass cls) }
+    ; return (ATyCon (classTyCon cls)) }
   where
    tc_sig (IfaceClassOp occ dm rdr_ty)
      = do { op_name <- lookupIfaceTop occ

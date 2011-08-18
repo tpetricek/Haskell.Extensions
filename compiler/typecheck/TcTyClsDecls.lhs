@@ -120,7 +120,7 @@ zipRecTyClss :: [[LTyClDecl Name]]
              -> [(Name,TyThing)]
 -- Build a name-TyThing mapping for the things bound by decls
 -- being careful not to look at the [TyThing]
--- The TyThings in the result list must have a visible ATyCon/AClass,
+-- The TyThings in the result list must have a visible ATyCon,
 -- because typechecking types (in, say, tcTyClDecl) looks at this outer constructor
 zipRecTyClss decls_s rec_things
   = [ get decl | decls <- decls_s, L _ decl <- flattenATs decls ]
@@ -129,9 +129,6 @@ zipRecTyClss decls_s rec_things
     rec_type_env = mkTypeEnv rec_things
 
     get :: TyClDecl Name -> (Name, TyThing)
-    get (ClassDecl {tcdLName = L _ name}) = (name, AClass cl)
-      where
-        Just (AClass cl) = lookupTypeEnv rec_type_env name
     get decl = (name, ATyCon tc)
       where
         name = tcdName decl
@@ -544,7 +541,7 @@ tcTyClDecl1 _parent calc_isrec
                      ]
         class_ats = map ATyCon (classATs clas)
 
-  ; return (AClass clas : gen_dm_ids ++ class_ats )
+  ; return (ATyCon (classTyCon clas) : gen_dm_ids ++ class_ats )
       -- NB: Order is important due to the call to `mkGlobalThings' when
       --     tying the the type and class declaration type checking knot.
   }
@@ -815,9 +812,11 @@ checkValidTyCl decl
     do	{ thing <- tcLookupLocatedGlobal (tcdLName decl)
 	; traceTc "Validity of" (ppr thing)	
 	; case thing of
-	    ATyCon tc -> checkValidTyCon tc
-	    AClass cl -> do { checkValidClass cl 
-                            ; mapM_ (addLocM checkValidTyCl) (tcdATs decl) }
+	    ATyCon tc -> do
+                checkValidTyCon tc
+                case decl of
+                  ClassDecl { tcdATs = ats } -> mapM_ (addLocM checkValidTyCl) ats
+                  _                          -> return ()
             AnId _    -> return ()  -- Generic default methods are checked
 	    	      	 	    -- with their parent class
             _         -> panic "checkValidTyCl"
@@ -841,6 +840,9 @@ checkValidTyCl decl
 
 checkValidTyCon :: TyCon -> TcM ()
 checkValidTyCon tc 
+  | Just cl <- tyConClass_maybe tc
+  = checkValidClass cl
+
   | isSynTyCon tc 
   = case synTyConRhs tc of
       SynFamilyTyCon {} -> return ()
@@ -1033,7 +1035,8 @@ mkDefaultMethodIds :: [TyThing] -> [Id]
 -- See Note [Default method Ids and Template Haskell]
 mkDefaultMethodIds things
   = [ mkExportedLocalId dm_name (idType sel_id)
-    | AClass cls <- things
+    | ATyCon tc <- things
+    , Just cls <- [tyConClass_maybe tc]
     , (sel_id, DefMeth dm_name) <- classOpItems cls ]
 \end{code}
 

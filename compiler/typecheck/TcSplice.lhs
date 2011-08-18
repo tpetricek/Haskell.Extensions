@@ -1088,7 +1088,6 @@ reifyThing (AGlobal (AnId id))
 
 reifyThing (AGlobal (ATyCon tc))   = reifyTyCon tc
 reifyThing (AGlobal (ACoAxiom ax)) = reifyAxiom ax
-reifyThing (AGlobal (AClass cls))  = reifyClass cls
 reifyThing (AGlobal (ADataCon dc))
   = do	{ let name = dataConName dc
 	; ty <- reifyType (idType (dataConWrapId dc))
@@ -1124,6 +1123,9 @@ reifyAxiom ax@(CoAxiom { co_ax_lhs = lhs, co_ax_rhs = rhs })
 
 reifyTyCon :: TyCon -> TcM TH.Info
 reifyTyCon tc
+  | Just cls <- tyConClass_maybe tc
+  = reifyClass cls
+
   | isFunTyCon tc  
   = return (TH.PrimTyConI (reifyName tc) 2 		  False)
 

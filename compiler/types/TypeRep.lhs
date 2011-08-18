@@ -288,7 +288,6 @@ data TyThing = AnId     Id
 	     | ADataCon DataCon
 	     | ATyCon   TyCon
              | ACoAxiom CoAxiom
-	     | AClass   Class
 
 instance Outputable TyThing where 
   ppr = pprTyThing
@@ -299,7 +298,6 @@ pprTyThing thing = pprTyThingCategory thing <+> quotes (ppr (getName thing))
 pprTyThingCategory :: TyThing -> SDoc
 pprTyThingCategory (ATyCon _) 	= ptext (sLit "Type constructor")
 pprTyThingCategory (ACoAxiom _) = ptext (sLit "Coercion axiom")
-pprTyThingCategory (AClass _)   = ptext (sLit "Class")
 pprTyThingCategory (AnId   _)   = ptext (sLit "Identifier")
 pprTyThingCategory (ADataCon _) = ptext (sLit "Data constructor")
 
@@ -307,7 +305,6 @@ instance NamedThing TyThing where	-- Can't put this with the type
   getName (AnId id)     = getName id	-- decl, because the DataCon instance
   getName (ATyCon tc)   = getName tc	-- isn't visible there
   getName (ACoAxiom cc) = getName cc
-  getName (AClass cl)   = getName cl
   getName (ADataCon dc) = dataConName dc
 \end{code}
 

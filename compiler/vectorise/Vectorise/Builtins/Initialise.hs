@@ -329,4 +329,4 @@ externalType mod fs
 --
 externalClass :: Module -> FastString -> DsM Class
 externalClass mod fs
-  = dsLookupClass =<< lookupOrig mod (mkClsOccFS fs)
+  = fmap (maybe (panic "externalClass") id . tyConClass_maybe) $ dsLookupTyCon =<< lookupOrig mod (mkClsOccFS fs)

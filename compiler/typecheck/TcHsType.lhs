@@ -518,9 +518,10 @@ kcClass :: Name -> TcM TcKind
 kcClass cls = do	-- Must be a class
     thing <- tcLookup cls
     case thing of
-        AThing kind             -> return kind
-        AGlobal (AClass cls)    -> return (tyConKind (classTyCon cls))
-        _                       -> wrongThingErr "class" thing cls
+        AThing kind                         -> return kind
+        AGlobal (ATyCon tc)
+          | Just cls <- tyConClass_maybe tc -> return (tyConKind (classTyCon cls))
+        _                                   -> wrongThingErr "class" thing cls
 \end{code}
 
 

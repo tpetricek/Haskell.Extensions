@@ -23,7 +23,6 @@ module DsMonad (
         UniqSupply, newUniqueSupply,
         getDOptsDs, getGhcModeDs, doptDs, woptDs,
         dsLookupGlobal, dsLookupGlobalId, dsLookupDPHId, dsLookupTyCon, dsLookupDataCon,
-        dsLookupClass,
 
 	DsMetaEnv, DsMetaVal(..), dsLookupMetaEnv, dsExtendMetaEnv,
 
@@ -320,10 +319,6 @@ dsLookupTyCon name
 dsLookupDataCon :: Name -> DsM DataCon
 dsLookupDataCon name
   = tyThingDataCon <$> dsLookupGlobal name
-
-dsLookupClass :: Name -> DsM Class
-dsLookupClass name
-  = tyThingClass <$> dsLookupGlobal name
 \end{code}
 
 \begin{code}

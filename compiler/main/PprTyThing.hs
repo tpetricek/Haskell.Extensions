@@ -23,6 +23,7 @@ import DataCon
 import Id
 import IdInfo
 import TyCon
+import Class   ( classTyCon )
 import Coercion( pprCoAxiom )
 import TcType
 import Name
@@ -58,7 +59,6 @@ ppr_ty_thing pefas _ 	 (AnId id)          = pprId         pefas id
 ppr_ty_thing pefas _ 	 (ADataCon dataCon) = pprDataConSig pefas dataCon
 ppr_ty_thing pefas show_me (ATyCon tyCon)   = pprTyCon      pefas show_me tyCon
 ppr_ty_thing _     _       (ACoAxiom ax)    = pprCoAxiom    ax
-ppr_ty_thing pefas show_me (AClass cls)     = pprClass      pefas show_me cls
 
 -- | Pretty-prints a 'TyThing' in context: that is, if the entity
 -- is a data constructor, record selector, or class method, then
@@ -84,7 +84,7 @@ pprTyThingParent_maybe :: TyThing -> Maybe TyThing
 pprTyThingParent_maybe (ADataCon dc) = Just (ATyCon (dataConTyCon dc))
 pprTyThingParent_maybe (AnId id)     = case idDetails id of
       				      	 RecSelId { sel_tycon = tc } -> Just (ATyCon tc)
-      				      	 ClassOpId cls               -> Just (AClass cls)
+      				      	 ClassOpId cls               -> Just (ATyCon (classTyCon cls))
                                       	 _other                      -> Nothing
 pprTyThingParent_maybe _other = Nothing
 
@@ -96,12 +96,13 @@ pprTyThingHdr pefas (AnId id)          = pprId         pefas id
 pprTyThingHdr pefas (ADataCon dataCon) = pprDataConSig pefas dataCon
 pprTyThingHdr pefas (ATyCon tyCon)     = pprTyConHdr   pefas tyCon
 pprTyThingHdr _     (ACoAxiom ax)      = pprCoAxiom ax
-pprTyThingHdr pefas (AClass cls)       = pprClassHdr   pefas cls
 
 pprTyConHdr :: PrintExplicitForalls -> TyCon -> SDoc
-pprTyConHdr _ tyCon
+pprTyConHdr pefas tyCon
   | Just (_fam_tc, tys) <- tyConFamInst_maybe tyCon
   = ptext keyword <+> ptext (sLit "instance") <+> pprTypeApp tyCon tys
+  | Just cls <- tyConClass_maybe tyCon
+  = pprClassHdr pefas cls
   | otherwise
   = ptext keyword <+> opt_family <+> opt_stupid <+> ppr_bndr tyCon <+> hsep (map ppr vars)
   where
@@ -165,6 +166,8 @@ pprTyCon pefas show_me tyCon
     else
       let rhs_type = GHC.synTyConType tyCon
       in hang (pprTyConHdr pefas tyCon <+> equals) 2 (pprTypeForUser pefas rhs_type)
+  | Just cls <- GHC.tyConClass_maybe tyCon
+  = pprClassTyCon pefas show_me cls
   | otherwise
   = pprAlgTyCon pefas show_me tyCon
 
@@ -182,6 +185,18 @@ pprAlgTyCon pefas show_me tyCon
     show_con dc
       | ok_con dc = Just (pprDataConDecl pefas show_me gadt dc)
       | otherwise = Nothing
+
+pprClassTyCon :: PrintExplicitForalls -> ShowMe -> GHC.Class -> SDoc
+pprClassTyCon pefas show_me cls
+  | null methods
+  = pprClassHdr pefas cls
+  | otherwise
+  = hang (pprClassHdr pefas cls <+> ptext (sLit "where"))
+       2 (vcat (ppr_trim show_meth methods))
+  where
+    methods = GHC.classMethods cls
+    show_meth id | show_me (idName id) = Just (pprClassMethod pefas id)
+                 | otherwise           = Nothing
 
 pprDataConDecl :: PrintExplicitForalls -> ShowMe -> Bool -> GHC.DataCon -> SDoc
 pprDataConDecl pefas show_me gadt_style dataCon
@@ -219,18 +234,6 @@ pprDataConDecl pefas show_me gadt_style dataCon
 	= ppr_bndr dataCon <+>
 		braces (sep (punctuate comma (ppr_trim maybe_show_label
 					(zip labels fields))))
-
-pprClass :: PrintExplicitForalls -> ShowMe -> GHC.Class -> SDoc
-pprClass pefas show_me cls
-  | null methods
-  = pprClassHdr pefas cls
-  | otherwise
-  = hang (pprClassHdr pefas cls <+> ptext (sLit "where"))
-       2 (vcat (ppr_trim show_meth methods))
-  where
-    methods = GHC.classMethods cls
-    show_meth id | show_me (idName id) = Just (pprClassMethod pefas id)
-	         | otherwise           = Nothing
 
 pprClassMethod :: PrintExplicitForalls -> Id -> SDoc
 pprClassMethod pefas id

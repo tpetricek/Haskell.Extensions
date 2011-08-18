@@ -1323,37 +1323,6 @@ tyThingToIfaceDecl (AnId id)
 	      ifIdDetails = toIfaceIdDetails (idDetails id),
 	      ifIdInfo    = toIfaceIdInfo (idInfo id) }
 
-tyThingToIfaceDecl (AClass clas)
-  = IfaceClass { ifCtxt	  = toIfaceContext sc_theta,
-		 ifName	  = getOccName (classTyCon clas),
-		 ifTyVars = toIfaceTvBndrs clas_tyvars,
-		 ifFDs    = map toIfaceFD clas_fds,
-		 ifATs	  = map (tyThingToIfaceDecl . ATyCon) clas_ats,
-		 ifSigs	  = map toIfaceClassOp op_stuff,
-	  	 ifRec    = boolToRecFlag (isRecursiveTyCon tycon) }
-  where
-    (clas_tyvars, clas_fds, sc_theta, _, clas_ats, op_stuff) 
-      = classExtraBigSig clas
-    tycon = classTyCon clas
-
-    toIfaceClassOp (sel_id, def_meth)
-	= ASSERT(sel_tyvars == clas_tyvars)
-	  IfaceClassOp (getOccName sel_id) (toDmSpec def_meth) (toIfaceType op_ty)
-	where
-		-- Be careful when splitting the type, because of things
-		-- like  	class Foo a where
-		--		  op :: (?x :: String) => a -> a
-		-- and  	class Baz a where
-		--		  op :: (Ord a) => a -> a
-	  (sel_tyvars, rho_ty) = splitForAllTys (idType sel_id)
-	  op_ty		       = funResultTy rho_ty
-
-    toDmSpec NoDefMeth      = NoDM
-    toDmSpec (GenDefMeth _) = GenericDM
-    toDmSpec (DefMeth _)    = VanillaDM
-
-    toIfaceFD (tvs1, tvs2) = (map getFS tvs1, map getFS tvs2)
-
 tyThingToIfaceDecl (ATyCon tycon)
   | isSynTyCon tycon
   = IfaceSyn {	ifName    = getOccName tycon,
@@ -1375,6 +1344,9 @@ tyThingToIfaceDecl (ATyCon tycon)
   | isForeignTyCon tycon
   = IfaceForeign { ifName    = getOccName tycon,
 	    	   ifExtName = tyConExtName tycon }
+
+  | Just clas <- tyConClass_maybe tycon
+  = classToIfaceDecl clas
 
   | otherwise = pprPanic "toIfaceDecl" (ppr tycon)
   where
@@ -1420,6 +1392,39 @@ tyThingToIfaceDecl c@(ACoAxiom _) = pprPanic "tyThingToIfaceDecl (ACoCon _)" (pp
 
 tyThingToIfaceDecl (ADataCon dc)
  = pprPanic "toIfaceDecl" (ppr dc)	-- Should be trimmed out earlier
+
+
+classToIfaceDecl :: Class -> IfaceDecl
+classToIfaceDecl clas
+  = IfaceClass { ifCtxt   = toIfaceContext sc_theta,
+                 ifName   = getOccName (classTyCon clas),
+                 ifTyVars = toIfaceTvBndrs clas_tyvars,
+                 ifFDs    = map toIfaceFD clas_fds,
+                 ifATs    = map (tyThingToIfaceDecl . ATyCon) clas_ats,
+                 ifSigs   = map toIfaceClassOp op_stuff,
+                 ifRec    = boolToRecFlag (isRecursiveTyCon tycon) }
+  where
+    (clas_tyvars, clas_fds, sc_theta, _, clas_ats, op_stuff) 
+      = classExtraBigSig clas
+    tycon = classTyCon clas
+
+    toIfaceClassOp (sel_id, def_meth)
+        = ASSERT(sel_tyvars == clas_tyvars)
+          IfaceClassOp (getOccName sel_id) (toDmSpec def_meth) (toIfaceType op_ty)
+        where
+                -- Be careful when splitting the type, because of things
+                -- like         class Foo a where
+                --                op :: (?x :: String) => a -> a
+                -- and          class Baz a where
+                --                op :: (Ord a) => a -> a
+          (sel_tyvars, rho_ty) = splitForAllTys (idType sel_id)
+          op_ty                = funResultTy rho_ty
+
+    toDmSpec NoDefMeth      = NoDM
+    toDmSpec (GenDefMeth _) = GenericDM
+    toDmSpec (DefMeth _)    = VanillaDM
+
+    toIfaceFD (tvs1, tvs2) = (map getFS tvs1, map getFS tvs2)
 
 
 getFS :: NamedThing a => a -> FastString

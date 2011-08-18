@@ -320,7 +320,6 @@ new_tc_rhs tc = snd (newTyConRhs tc)    -- Ignore the type variables
 
 getTyCon :: TyThing -> Maybe TyCon
 getTyCon (ATyCon tc) = Just tc
-getTyCon (AClass cl) = Just (classTyCon cl)
 getTyCon _           = Nothing
 
 findLoopBreakers :: [(TyCon, [TyCon])] -> [Name]
