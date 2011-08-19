@@ -1460,7 +1460,7 @@ data FFoldType a      -- Describes how to fold over a Type in a functor like way
 	, ft_var     :: a 	    	    -- The variable itself			       
 	, ft_co_var  :: a	    	    -- The variable itself, contravariantly	       
 	, ft_fun     :: a -> a -> a  	    -- Function type
-	, ft_tup     :: Boxity -> [a] -> a  -- Tuple type 
+	, ft_tup     :: TupleSort -> [a] -> a  -- Tuple type 
 	, ft_ty_app  :: Type -> a -> a      -- Type app, variable only in last argument	       
 	, ft_bad_app :: a                   -- Type app, variable other than in last argument  
 	, ft_forall  :: TcTyVar -> a -> a   -- Forall type                                     
@@ -1491,7 +1491,7 @@ functorLikeTraverse var (FT { ft_triv = caseTrivial,     ft_var = caseVar
                | not (or xcs)     = (caseTrivial, False)   -- Variable does not occur
                -- At this point we know that xrs, xcs is not empty,
                -- and at least one xr is True
-               | isTupleTyCon con = (caseTuple (tupleTyConBoxity con) xrs, True)
+               | isTupleTyCon con = (caseTuple (tupleTyConSort con) xrs, True)
                | or (init xcs)    = (caseWrongArg, True)   -- T (..var..)    ty
                | otherwise        =                        -- T (..no var..) ty
                                     (caseTyApp (fst (splitAppTy ty)) (last xrs), True)
@@ -1551,9 +1551,9 @@ mkSimpleConMatch fold extra_pats con insides = do
 
 -- "case x of (a1,a2,a3) -> fold [x1 a1, x2 a2, x3 a3]"
 mkSimpleTupleCase :: Monad m => ([LPat RdrName] -> DataCon -> [LHsExpr RdrName -> a] -> m (LMatch RdrName))
-                  -> Boxity -> [LHsExpr RdrName -> a] -> LHsExpr RdrName -> m (LHsExpr RdrName)
-mkSimpleTupleCase match_for_con boxity insides x = do
-    let con = tupleCon boxity (length insides)
+                  -> TupleSort -> [LHsExpr RdrName -> a] -> LHsExpr RdrName -> m (LHsExpr RdrName)
+mkSimpleTupleCase match_for_con sort insides x = do
+    let con = tupleCon sort (length insides)
     match <- match_for_con [] con insides
     return $ nlHsCase x [match]
 \end{code}

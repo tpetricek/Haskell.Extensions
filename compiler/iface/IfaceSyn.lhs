@@ -227,7 +227,7 @@ data IfaceExpr
   | IfaceExt    IfExtName
   | IfaceType   IfaceType
   | IfaceCo     IfaceType		-- We re-use IfaceType for coercions
-  | IfaceTuple 	Boxity [IfaceExpr]	-- Saturated; type arguments omitted
+  | IfaceTuple 	TupleSort [IfaceExpr]	-- Saturated; type arguments omitted
   | IfaceLam 	IfaceBndr IfaceExpr
   | IfaceApp 	IfaceExpr IfaceExpr
   | IfaceCase	IfaceExpr IfLclName [IfaceAlt]
@@ -248,7 +248,7 @@ type IfaceAlt = (IfaceConAlt, [IfLclName], IfaceExpr)
 
 data IfaceConAlt = IfaceDefault
                  | IfaceDataAlt IfExtName
-                 | IfaceTupleAlt Boxity
+                 | IfaceTupleAlt TupleSort
                  | IfaceLitAlt Literal
 
 data IfaceBinding

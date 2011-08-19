@@ -11,7 +11,7 @@
 module TysPrim(
 	mkPrimTc, -- For implicit parameters in TysWiredIn only
 
-        alphaTyVars, betaTyVars, alphaTyVar, betaTyVar, gammaTyVar, deltaTyVar,
+        tyVarList, alphaTyVars, betaTyVars, alphaTyVar, betaTyVar, gammaTyVar, deltaTyVar,
 	alphaTy, betaTy, gammaTy, deltaTy,
 	openAlphaTy, openBetaTy, openAlphaTyVar, openBetaTyVar, openAlphaTyVars,
         argAlphaTy, argAlphaTyVar, argBetaTy, argBetaTyVar,

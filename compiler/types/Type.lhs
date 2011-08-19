@@ -1479,14 +1479,6 @@ type SimpleKind = Kind
 \begin{code}
 typeKind :: Type -> Kind
 typeKind ty@(TyConApp tc tys) 
-  | isBoxedTupleTyCon tc
-  , tyConArity tc == length tys
-  = case tys of
-      []       -> liftedTypeKind -- FIXME: can't write nullary facts!!
-      (ty:tys) -> ASSERT(all (\ty -> typeKind ty `eqKind` k) tys) k
-        where k = typeKind ty
-
-  | otherwise
   = ASSERT2( not (tc `hasKey` eqPrimTyConKey) || length tys == 2, ppr ty )
              -- Assertion checks for unsaturated application of ~#
              -- See Note [The ~# TyCon] in TysPrim

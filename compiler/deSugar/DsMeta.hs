@@ -666,11 +666,11 @@ repTy (HsPArrTy t)          = do
 			        t1   <- repLTy t
 			        tcon <- repTy (HsTyVar (tyConName parrTyCon))
 			        repTapp tcon t1
-repTy (HsTupleTy Boxed tys)	    = do
+repTy (HsTupleTy BoxedTuple tys) = do
 			        tys1 <- repLTys tys 
 			        tcon <- repTupleTyCon (length tys)
 			        repTapps tcon tys1
-repTy (HsTupleTy Unboxed tys)	    = do
+repTy (HsTupleTy UnboxedTuple tys) = do
 			        tys1 <- repLTys tys
 			        tcon <- repUnboxedTupleTyCon (length tys)
 			        repTapps tcon tys1

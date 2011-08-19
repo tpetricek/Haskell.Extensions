@@ -57,7 +57,7 @@ import Unique     ( Unique, Uniquable(..), hasKey,
                     mkPreludeTyConUnique, mkPreludeClassUnique,
                     mkTupleTyConUnique
                   )
-import BasicTypes ( Boxity(..), Arity )
+import BasicTypes ( TupleSort(..), Arity )
 import Name       ( Name, mkInternalName, mkExternalName, mkSystemVarName )
 import SrcLoc
 import FastString
@@ -405,10 +405,11 @@ mkMainModule_ m = mkModule mainPackageId m
 %************************************************************************
 
 \begin{code}
-mkTupleModule :: Boxity -> Arity -> Module
-mkTupleModule Boxed   0 = gHC_UNIT
-mkTupleModule Boxed   _ = gHC_TUPLE
-mkTupleModule Unboxed _ = gHC_PRIM
+mkTupleModule :: TupleSort -> Arity -> Module
+mkTupleModule BoxedTuple   0 = gHC_UNIT
+mkTupleModule BoxedTuple   _ = gHC_TUPLE
+mkTupleModule FactTuple    _ = gHC_TUPLE
+mkTupleModule UnboxedTuple _ = gHC_PRIM
 \end{code}
 
 
@@ -1303,7 +1304,7 @@ rep1TyConKey = mkPreludeTyConUnique 156
 -----------------------------------------------------
 
 unitTyConKey :: Unique
-unitTyConKey = mkTupleTyConUnique Boxed 0
+unitTyConKey = mkTupleTyConUnique BoxedTuple 0
 \end{code}
 
 %************************************************************************

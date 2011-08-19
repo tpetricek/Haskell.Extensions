@@ -81,7 +81,7 @@ data IfaceTyCon 	-- Encodes type consructors, kind constructors
   = IfaceTc IfExtName	-- The common case
   | IfaceIntTc | IfaceBoolTc | IfaceCharTc
   | IfaceListTc | IfacePArrTc
-  | IfaceTupTc Boxity Arity 
+  | IfaceTupTc TupleSort Arity 
   | IfaceIPTc (IPName OccName) -- Used for all implicit parameter TyCons
   | IfaceAnyTc IfaceKind     -- Used for AnyTyCon (see Note [Any Types] in TysPrim)
     	       		     -- other than 'Any :: *' itself
@@ -356,7 +356,7 @@ toIfaceCoVar = occNameFS . getOccName
 
 toIfaceTyCon :: TyCon -> IfaceTyCon
 toIfaceTyCon tc 
-  | isTupleTyCon tc            = IfaceTupTc (tupleTyConBoxity tc) (tyConArity tc)
+  | isTupleTyCon tc            = IfaceTupTc (tupleTyConSort tc) (tyConArity tc)
   | isAnyTyCon tc              = IfaceAnyTc (toIfaceKind (tyConKind tc))
   | Just n <- tyConIP_maybe tc = IfaceIPTc (fmap nameOccName n)
   | otherwise	               = toIfaceTyCon_name (tyConName tc)
@@ -370,7 +370,7 @@ toIfaceTyCon_name nm
 
 toIfaceWiredInTyCon :: TyCon -> Name -> IfaceTyCon
 toIfaceWiredInTyCon tc nm
-  | isTupleTyCon tc                 = IfaceTupTc  (tupleTyConBoxity tc) (tyConArity tc)
+  | isTupleTyCon tc                 = IfaceTupTc  (tupleTyConSort tc) (tyConArity tc)
   | isAnyTyCon tc                   = IfaceAnyTc (toIfaceKind (tyConKind tc))
   | Just n <- tyConIP_maybe tc      = IfaceIPTc (fmap nameOccName n)
   | nm == intTyConName              = IfaceIntTc

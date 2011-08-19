@@ -48,7 +48,7 @@ import Util		( filterOut )
 import SrcLoc
 import DynFlags
 import HscTypes		( HscEnv, hsc_dflags )
-import BasicTypes       ( Boxity(..) )
+import BasicTypes       ( TupleSort(..) )
 import ListSetOps       ( findDupsEq )
 import Digraph		( SCC, flattenSCC, stronglyConnCompFromEdgedVertices )
 
@@ -941,7 +941,7 @@ rnConDecl decl@(ConDecl { con_name = name, con_qvars = tvs
                        , con_details = new_details', con_res = new_res_ty, con_doc = mb_doc' }) }}
  where
     doc = text "In the definition of data constructor" <+> quotes (ppr name)
-    get_rdr_tvs tys  = extractHsRhoRdrTyVars cxt (noLoc (HsTupleTy Boxed tys))
+    get_rdr_tvs tys  = extractHsRhoRdrTyVars cxt (noLoc (HsTupleTy BoxedTuple tys))
 
 rnConResult :: SDoc
             -> HsConDetails (LHsType Name) [ConDeclField Name]

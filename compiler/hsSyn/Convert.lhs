@@ -809,7 +809,7 @@ cvtType ty
              | length tys' == n 	-- Saturated
              -> if n==1 then return (head tys')	-- Singleton tuples treated 
                                                 -- like nothing (ie just parens)
-                        else returnL (HsTupleTy Boxed tys')
+                        else returnL (HsTupleTy BoxedTuple tys')
              | n == 1    
              -> failWith (ptext (sLit "Illegal 1-tuple type constructor"))
              | otherwise 
@@ -818,7 +818,7 @@ cvtType ty
              | length tys' == n 	-- Saturated
              -> if n==1 then return (head tys')	-- Singleton tuples treated
                                                 -- like nothing (ie just parens)
-                        else returnL (HsTupleTy Unboxed tys')
+                        else returnL (HsTupleTy UnboxedTuple tys')
              | otherwise
              -> mk_apps (HsTyVar (getRdrName (tupleTyCon Unboxed n))) tys'
            ArrowT 

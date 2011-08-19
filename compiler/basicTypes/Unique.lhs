@@ -312,9 +312,9 @@ Allocation of unique supply characters:
 mkAlphaTyVarUnique     :: Int -> Unique
 mkPreludeClassUnique   :: Int -> Unique
 mkPreludeTyConUnique   :: Int -> Unique
-mkTupleTyConUnique     :: Boxity -> Int -> Unique
+mkTupleTyConUnique     :: TupleSort -> Int -> Unique
 mkPreludeDataConUnique :: Int -> Unique
-mkTupleDataConUnique   :: Boxity -> Int -> Unique
+mkTupleDataConUnique   :: TupleSort -> Int -> Unique
 mkPrimOpIdUnique       :: Int -> Unique
 mkPreludeMiscIdUnique  :: Int -> Unique
 mkPArrDataConUnique    :: Int -> Unique
@@ -328,8 +328,9 @@ mkPreludeClassUnique i          = mkUnique '2' i
 -- are for the generic to/from Ids.  See TysWiredIn.mk_tc_gen_info.
 
 mkPreludeTyConUnique i		= mkUnique '3' (3*i)
-mkTupleTyConUnique Boxed   a	= mkUnique '4' (3*a)
-mkTupleTyConUnique Unboxed a	= mkUnique '5' (3*a)
+mkTupleTyConUnique BoxedTuple   a	= mkUnique '4' (3*a)
+mkTupleTyConUnique UnboxedTuple a	= mkUnique '5' (3*a)
+mkTupleTyConUnique FactTuple    a	= mkUnique 'k' (3*a)
 
 -- Data constructor keys occupy *two* slots.  The first is used for the
 -- data constructor itself and its wrapper function (the function that
@@ -338,8 +339,9 @@ mkTupleTyConUnique Unboxed a	= mkUnique '5' (3*a)
 -- representation).
 
 mkPreludeDataConUnique i	= mkUnique '6' (2*i)	-- Must be alphabetic
-mkTupleDataConUnique Boxed a	= mkUnique '7' (2*a)	-- ditto (*may* be used in C labels)
-mkTupleDataConUnique Unboxed a	= mkUnique '8' (2*a)
+mkTupleDataConUnique BoxedTuple   a = mkUnique '7' (2*a)	-- ditto (*may* be used in C labels)
+mkTupleDataConUnique UnboxedTuple a = mkUnique '8' (2*a)
+mkTupleDataConUnique FactTuple    a = mkUnique 'h' (2*a)
 
 mkIpTyConOccUnique, mkIpDataConOccUnique :: FastString -> Unique
 mkIpTyConOccUnique	   fs = mkUnique 'm' (iBox (uniqueOfFS fs))
@@ -348,7 +350,7 @@ mkIpDataConOccUnique   fs = mkUnique 'M' (iBox (uniqueOfFS fs))
 -- This one is used for a tiresome reason
 -- to improve a consistency-checking error check in the renamer
 isTupleKey u = case unpkUnique u of
-		(tag,_) -> tag == '4' || tag == '5' || tag == '7' || tag == '8'
+		(tag,_) -> tag == '4' || tag == '5' || tag == '7' || tag == '8' || tag == 'k' || tag == 'h'
 
 mkPrimOpIdUnique op         = mkUnique '9' op
 mkPreludeMiscIdUnique  i    = mkUnique '0' i

@@ -234,7 +234,7 @@ initBuiltinVars (Builtins { dphModules = mods })
     preludeDataCons (Modules { dph_Prelude_Tuple = dph_Prelude_Tuple })
       = [mk_tup n dph_Prelude_Tuple (mkFastString $ "tup" ++ show n) | n <- [2..3]]
       where
-        mk_tup n mod name = (tupleCon Boxed n, mod, name)
+        mk_tup n mod name = (tupleCon BoxedTuple n, mod, name)
 
 -- |Get a list of names to `TyCon`s in the mock prelude.
 --

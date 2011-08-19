@@ -81,7 +81,7 @@ import TyCon
 import TypeRep
 import RdrName
 import Name
-import BasicTypes       ( IPName(..), ipNameName, Arity, RecFlag(..), Boxity(..), isBoxed, HsBang(..) )
+import BasicTypes       ( TupleSort(..), tupleSortBoxity, IPName(..), ipNameName, Arity, RecFlag(..), Boxity(..), isBoxed, HsBang(..) )
 import Unique           ( incrUnique, mkIpTyConOccUnique, mkIpDataConOccUnique, mkTupleTyConUnique,
 			  mkTupleDataConUnique, mkPArrDataConUnique )
 import Data.Array
@@ -261,60 +261,67 @@ pcDataConWithFixity declared_infix dc_name tyvars arg_tys tycon
 %************************************************************************
 
 \begin{code}
-tupleTyCon :: Boxity -> Arity -> TyCon
-tupleTyCon boxity i | i > mAX_TUPLE_SIZE = fst (mk_tuple boxity i)	-- Build one specially
-tupleTyCon Boxed   i = fst (boxedTupleArr   ! i)
-tupleTyCon Unboxed i = fst (unboxedTupleArr ! i)
+tupleTyCon :: TupleSort -> Arity -> TyCon
+tupleTyCon sort i | i > mAX_TUPLE_SIZE = fst (mk_tuple sort i)	-- Build one specially
+tupleTyCon BoxedTuple   i = fst (boxedTupleArr   ! i)
+tupleTyCon UnboxedTuple i = fst (unboxedTupleArr ! i)
+tupleTyCon FactTuple    i = fst (factTupleArr    ! i)
 
-tupleCon :: Boxity -> Arity -> DataCon
-tupleCon boxity i | i > mAX_TUPLE_SIZE = snd (mk_tuple boxity i)	-- Build one specially
-tupleCon Boxed   i = snd (boxedTupleArr   ! i)
-tupleCon Unboxed i = snd (unboxedTupleArr ! i)
+tupleCon :: TupleSort -> Arity -> DataCon
+tupleCon sort i | i > mAX_TUPLE_SIZE = snd (mk_tuple sort i)	-- Build one specially
+tupleCon BoxedTuple   i = snd (boxedTupleArr   ! i)
+tupleCon UnboxedTuple i = snd (unboxedTupleArr ! i)
+tupleCon FactTuple    i = snd (factTupleArr    ! i)
 
-boxedTupleArr, unboxedTupleArr :: Array Int (TyCon,DataCon)
-boxedTupleArr   = listArray (0,mAX_TUPLE_SIZE) [mk_tuple Boxed i | i <- [0..mAX_TUPLE_SIZE]]
-unboxedTupleArr = listArray (0,mAX_TUPLE_SIZE) [mk_tuple Unboxed i | i <- [0..mAX_TUPLE_SIZE]]
+boxedTupleArr, unboxedTupleArr, factTupleArr :: Array Int (TyCon,DataCon)
+boxedTupleArr   = listArray (0,mAX_TUPLE_SIZE) [mk_tuple BoxedTuple i | i <- [0..mAX_TUPLE_SIZE]]
+unboxedTupleArr = listArray (0,mAX_TUPLE_SIZE) [mk_tuple UnboxedTuple i | i <- [0..mAX_TUPLE_SIZE]]
+factTupleArr = listArray (0,mAX_TUPLE_SIZE) [mk_tuple FactTuple i | i <- [0..mAX_TUPLE_SIZE]]
 
-mk_tuple :: Boxity -> Int -> (TyCon,DataCon)
-mk_tuple boxity arity = (tycon, tuple_con)
+mk_tuple :: TupleSort -> Int -> (TyCon,DataCon)
+mk_tuple sort arity = (tycon, tuple_con)
   where
-	tycon   = mkTupleTyCon tc_name tc_kind arity tyvars tuple_con boxity 
-	modu	= mkTupleModule boxity arity
-	tc_name = mkWiredInName modu (mkTupleOcc tcName boxity arity) tc_uniq
+	tycon   = mkTupleTyCon tc_name tc_kind arity tyvars tuple_con sort 
+	modu	= mkTupleModule sort arity
+	tc_name = mkWiredInName modu (mkTupleOcc tcName sort arity) tc_uniq
 				(ATyCon tycon) BuiltInSyntax
     	tc_kind = mkArrowKinds (map tyVarKind tyvars) res_kind
-	res_kind | isBoxed boxity = liftedTypeKind
-		 | otherwise	  = ubxTupleKind
+	res_kind = case sort of
+	  BoxedTuple   -> liftedTypeKind
+	  UnboxedTuple -> ubxTupleKind
+	  FactTuple    -> factKind
 
-	tyvars   | isBoxed boxity = take arity alphaTyVars
-		 | otherwise	  = take arity openAlphaTyVars
+	tyvars = take arity $ case sort of
+	  BoxedTuple   -> alphaTyVars
+	  UnboxedTuple -> openAlphaTyVars
+	  FactTuple    -> tyVarList factKind
 
 	tuple_con = pcDataCon dc_name tyvars tyvar_tys tycon
 	tyvar_tys = mkTyVarTys tyvars
-	dc_name   = mkWiredInName modu (mkTupleOcc dataName boxity arity) dc_uniq
+	dc_name   = mkWiredInName modu (mkTupleOcc dataName sort arity) dc_uniq
 				  (ADataCon tuple_con) BuiltInSyntax
- 	tc_uniq   = mkTupleTyConUnique   boxity arity
-	dc_uniq   = mkTupleDataConUnique boxity arity
+ 	tc_uniq   = mkTupleTyConUnique   sort arity
+	dc_uniq   = mkTupleDataConUnique sort arity
 
 unitTyCon :: TyCon
-unitTyCon     = tupleTyCon Boxed 0
+unitTyCon     = tupleTyCon BoxedTuple 0
 unitDataCon :: DataCon
 unitDataCon   = head (tyConDataCons unitTyCon)
 unitDataConId :: Id
 unitDataConId = dataConWorkId unitDataCon
 
 pairTyCon :: TyCon
-pairTyCon = tupleTyCon Boxed 2
+pairTyCon = tupleTyCon BoxedTuple 2
 
 unboxedSingletonTyCon :: TyCon
-unboxedSingletonTyCon   = tupleTyCon Unboxed 1
+unboxedSingletonTyCon   = tupleTyCon UnboxedTuple 1
 unboxedSingletonDataCon :: DataCon
-unboxedSingletonDataCon = tupleCon   Unboxed 1
+unboxedSingletonDataCon = tupleCon   UnboxedTuple 1
 
 unboxedPairTyCon :: TyCon
-unboxedPairTyCon   = tupleTyCon Unboxed 2
+unboxedPairTyCon   = tupleTyCon UnboxedTuple 2
 unboxedPairDataCon :: DataCon
-unboxedPairDataCon = tupleCon   Unboxed 2
+unboxedPairDataCon = tupleCon   UnboxedTuple 2
 \end{code}
 
 %************************************************************************
@@ -594,17 +601,17 @@ done by enumeration\srcloc{lib/prelude/InTup?.hs}.
 \end{itemize}
 
 \begin{code}
-mkTupleTy :: Boxity -> [Type] -> Type
+mkTupleTy :: TupleSort -> [Type] -> Type
 -- Special case for *boxed* 1-tuples, which are represented by the type itself
-mkTupleTy boxity [ty] | Boxed <- boxity = ty
-mkTupleTy boxity tys = mkTyConApp (tupleTyCon boxity (length tys)) tys
+mkTupleTy sort [ty] | Boxed <- tupleSortBoxity sort = ty
+mkTupleTy sort tys = mkTyConApp (tupleTyCon sort (length tys)) tys
 
 -- | Build the type of a small tuple that holds the specified type of thing
 mkBoxedTupleTy :: [Type] -> Type
-mkBoxedTupleTy tys = mkTupleTy Boxed tys
+mkBoxedTupleTy tys = mkTupleTy BoxedTuple tys
 
 unitTy :: Type
-unitTy = mkTupleTy Boxed []
+unitTy = mkTupleTy BoxedTuple []
 \end{code}
 
 %************************************************************************

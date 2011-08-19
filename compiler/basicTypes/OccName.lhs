@@ -746,24 +746,26 @@ tidyOccName in_scope occ@(OccName occ_sp fs)
 %************************************************************************
 
 \begin{code}
-mkTupleOcc :: NameSpace -> Boxity -> Arity -> OccName
-mkTupleOcc ns bx ar = OccName ns (mkFastString str)
+mkTupleOcc :: NameSpace -> TupleSort -> Arity -> OccName
+mkTupleOcc ns sort ar = OccName ns (mkFastString str)
   where
  	-- no need to cache these, the caching is done in the caller
 	-- (TysWiredIn.mk_tuple)
-    str = case bx of
-		Boxed   -> '(' : commas ++ ")"
-		Unboxed -> '(' : '#' : commas ++ "#)"
+    str = case sort of
+		BoxedTuple   -> '(' : commas ++ ")"
+		UnboxedTuple -> '(' : '#' : commas ++ "#)"
+		FactTuple    -> "Fact" ++ show ar
 
     commas = take (ar-1) (repeat ',')
 
-isTupleOcc_maybe :: OccName -> Maybe (NameSpace, Boxity, Arity)
+isTupleOcc_maybe :: OccName -> Maybe (NameSpace, TupleSort, Arity)
 -- Tuples are special, because there are so many of them!
 isTupleOcc_maybe (OccName ns fs)
   = case unpackFS fs of
-	'(':'#':',':rest -> Just (ns, Unboxed, 2 + count_commas rest)
-	'(':',':rest     -> Just (ns, Boxed,   2 + count_commas rest)
-	_other           -> Nothing
+	'(':'#':',':rest     -> Just (ns, UnboxedTuple, 2 + count_commas rest)
+	'(':',':rest         -> Just (ns, BoxedTuple,   2 + count_commas rest)
+	'F':'a':'c':'t':rest -> Just (ns, FactTuple,    read rest)
+	_other               -> Nothing
   where
     count_commas (',':rest) = 1 + count_commas rest
     count_commas _          = 0

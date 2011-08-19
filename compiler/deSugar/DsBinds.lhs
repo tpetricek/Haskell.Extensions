@@ -39,7 +39,7 @@ import TcType
 import Type
 import Coercion
 import TysPrim    ( anyTypeOfKind )
-import TysWiredIn ( eqBoxDataCon )
+import TysWiredIn ( eqBoxDataCon, tupleCon )
 import CostCentre
 import Module
 import Id
@@ -263,7 +263,8 @@ dsEvTerm (EvTupleSel v n)
     v' = v `setVarType` ty_want
     xs = map mkWildValBinder tys_before ++ v' : map mkWildValBinder tys_after
     (tys_before, ty_want:tys_after) = splitAt n tys
-dsEvTerm (EvTupleMk vs) = mkCoreVarTup vs
+dsEvTerm (EvTupleMk vs) = Var (dataConWorkId dc) `mkVarApps` vs
+  where dc = tupleCon FactTuple (length vs)
 dsEvTerm (EvSuperClass d n)
   = ASSERT( isClassPred (classSCTheta cls !! n) )
     	    -- We can only select *dictionary* superclasses

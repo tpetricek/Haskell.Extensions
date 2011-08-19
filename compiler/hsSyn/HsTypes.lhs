@@ -148,7 +148,7 @@ data HsType name
 
   | HsPArrTy		(LHsType name)	-- Elem. type of parallel array: [:t:]
 
-  | HsTupleTy		Boxity
+  | HsTupleTy		TupleSort
 			[LHsType name]	-- Element types (length gives arity)
 
   | HsOpTy		(LHsType name) (Located name) (LHsType name)

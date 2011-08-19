@@ -37,6 +37,7 @@ import Maybes
 import Util
 import Name
 import Outputable
+import BasicTypes ( boxityNormalTupleSort )
 import FastString
 
 import Control.Monad( when )
@@ -515,7 +516,7 @@ tidy1 _ (TuplePat pats boxity ty)
   = return (idDsWrapper, unLoc tuple_ConPat)
   where
     arity = length pats
-    tuple_ConPat = mkPrefixConPat (tupleCon boxity arity) pats ty
+    tuple_ConPat = mkPrefixConPat (tupleCon (boxityNormalTupleSort boxity) arity) pats ty
 
 -- LitPats: we *might* be able to replace these w/ a simpler form
 tidy1 _ (LitPat lit)

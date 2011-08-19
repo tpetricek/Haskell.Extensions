@@ -1029,8 +1029,8 @@ atype :: { LHsType RdrName }
 	| tyvar				{ L1 (HsTyVar (unLoc $1)) }
 	| strict_mark atype		{ LL (HsBangTy (unLoc $1) $2) }  -- Constructor sigs only
 	| '{' fielddecls '}'		{ LL $ HsRecTy $2 }              -- Constructor sigs only
-	| '(' ctype ',' comma_types1 ')'  { LL $ HsTupleTy Boxed  ($2:$4) }
-	| '(#' comma_types1 '#)'	{ LL $ HsTupleTy Unboxed $2     }
+	| '(' ctype ',' comma_types1 ')'  { LL $ HsTupleTy BoxedTuple  ($2:$4) }
+	| '(#' comma_types1 '#)'	{ LL $ HsTupleTy UnboxedTuple $2     }
 	| '[' ctype ']'			{ LL $ HsListTy  $2 }
 	| '[:' ctype ':]'		{ LL $ HsPArrTy  $2 }
 	| '(' ctype ')'		        { LL $ HsParTy   $2 }
@@ -1714,9 +1714,9 @@ con_list : con                  { L1 [$1] }
 
 sysdcon	:: { Located DataCon }	-- Wired in data constructors
 	: '(' ')'		{ LL unitDataCon }
-	| '(' commas ')'	{ LL $ tupleCon Boxed ($2 + 1) }
+	| '(' commas ')'	{ LL $ tupleCon BoxedTuple ($2 + 1) }
 	| '(#' '#)'		{ LL $ unboxedSingletonDataCon }
-	| '(#' commas '#)'	{ LL $ tupleCon Unboxed ($2 + 1) }
+	| '(#' commas '#)'	{ LL $ tupleCon UnboxedTuple ($2 + 1) }
 	| '[' ']'		{ LL nilDataCon }
 
 conop :: { Located RdrName }
@@ -1733,9 +1733,9 @@ qconop :: { Located RdrName }
 gtycon 	:: { Located RdrName }	-- A "general" qualified tycon
 	: oqtycon			{ $1 }
 	| '(' ')'			{ LL $ getRdrName unitTyCon }
-	| '(' commas ')'		{ LL $ getRdrName (tupleTyCon Boxed ($2 + 1)) }
+	| '(' commas ')'		{ LL $ getRdrName (tupleTyCon BoxedTuple ($2 + 1)) }
 	| '(#' '#)'			{ LL $ getRdrName unboxedSingletonTyCon }
-	| '(#' commas '#)'		{ LL $ getRdrName (tupleTyCon Unboxed ($2 + 1)) }
+	| '(#' commas '#)'		{ LL $ getRdrName (tupleTyCon UnboxedTuple ($2 + 1)) }
 	| '(' '->' ')'			{ LL $ getRdrName funTyCon }
 	| '[' ']'			{ LL $ listTyCon_RDR }
 	| '[:' ':]'			{ LL $ parrTyCon_RDR }

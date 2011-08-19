@@ -68,7 +68,7 @@ module TyCon(
         tyConExtName,           -- External name for foreign types
 	algTyConRhs,
         newTyConRhs, newTyConEtadRhs, unwrapNewTyCon_maybe, 
-        tupleTyConBoxity, tupleTyConArity,
+        tupleTyConBoxity, tupleTyConSort, tupleTyConArity,
 
         -- ** Manipulating TyCons
 	tcExpandTyCon_maybe, coreExpandTyCon_maybe,
@@ -346,13 +346,13 @@ data TyCon
   -- | Represents the infinite family of tuple type constructors, 
   --   @()@, @(a,b)@, @(# a, b #)@ etc.
   | TupleTyCon {
-	tyConUnique :: Unique,
-	tyConName   :: Name,
-	tc_kind   :: Kind,
-	tyConArity  :: Arity,
-	tyConBoxed  :: Boxity,
-	tyConTyVars :: [TyVar],
-	dataCon     :: DataCon -- ^ Corresponding tuple data constructor
+	tyConUnique    :: Unique,
+	tyConName      :: Name,
+	tc_kind        :: Kind,
+	tyConArity     :: Arity,
+	tyConTupleSort :: TupleSort,
+	tyConTyVars    :: [TyVar],
+	dataCon        :: DataCon -- ^ Corresponding tuple data constructor
     }
 
   -- | Represents type synonyms
@@ -824,15 +824,15 @@ mkTupleTyCon :: Name
              -> Arity   -- ^ Arity of the tuple
              -> [TyVar] -- ^ 'TyVar's scoped over: see 'tyConTyVars'
              -> DataCon 
-             -> Boxity  -- ^ Whether the tuple is boxed or unboxed
+             -> TupleSort  -- ^ Whether the tuple is boxed or unboxed
              -> TyCon
-mkTupleTyCon name kind arity tyvars con boxed 
+mkTupleTyCon name kind arity tyvars con sort
   = TupleTyCon {
 	tyConUnique = nameUnique name,
 	tyConName = name,
 	tc_kind = kind,
 	tyConArity = arity,
-	tyConBoxed = boxed,
+	tyConTupleSort = sort,
 	tyConTyVars = tyvars,
 	dataCon = con
     }
@@ -937,7 +937,7 @@ isPrimTyCon _              = False
 -- be true for primitive and unboxed-tuple 'TyCon's
 isUnLiftedTyCon :: TyCon -> Bool
 isUnLiftedTyCon (PrimTyCon  {isUnLifted = is_unlifted}) = is_unlifted
-isUnLiftedTyCon (TupleTyCon {tyConBoxed = boxity})      = not (isBoxed boxity)
+isUnLiftedTyCon (TupleTyCon {tyConTupleSort = sort})    = not (isBoxed (tupleSortBoxity sort))
 isUnLiftedTyCon _    				        = False
 
 -- | Returns @True@ if the supplied 'TyCon' resulted from either a
@@ -964,7 +964,7 @@ isDataTyCon (AlgTyCon {algTcRhs = rhs})
 	DataTyCon {}  -> True
 	NewTyCon {}   -> False
 	AbstractTyCon -> False	 -- We don't know, so return False
-isDataTyCon (TupleTyCon {tyConBoxed = boxity}) = isBoxed boxity
+isDataTyCon (TupleTyCon {tyConTupleSort = sort}) = isBoxed (tupleSortBoxity sort)
 isDataTyCon _ = False
 
 -- | Is this 'TyCon' that for a @newtype@
@@ -1080,18 +1080,23 @@ isTupleTyCon _               = False
 
 -- | Is this the 'TyCon' for an unboxed tuple?
 isUnboxedTupleTyCon :: TyCon -> Bool
-isUnboxedTupleTyCon (TupleTyCon {tyConBoxed = boxity}) = not (isBoxed boxity)
-isUnboxedTupleTyCon _                                  = False
+isUnboxedTupleTyCon (TupleTyCon {tyConTupleSort = sort}) = not (isBoxed (tupleSortBoxity sort))
+isUnboxedTupleTyCon _                                    = False
 
 -- | Is this the 'TyCon' for a boxed tuple?
 isBoxedTupleTyCon :: TyCon -> Bool
-isBoxedTupleTyCon (TupleTyCon {tyConBoxed = boxity}) = isBoxed boxity
-isBoxedTupleTyCon _                                  = False
+isBoxedTupleTyCon (TupleTyCon {tyConTupleSort = sort}) = isBoxed (tupleSortBoxity sort)
+isBoxedTupleTyCon _                                    = False
 
 -- | Extract the boxity of the given 'TyCon', if it is a 'TupleTyCon'.
 -- Panics otherwise
 tupleTyConBoxity :: TyCon -> Boxity
-tupleTyConBoxity tc = tyConBoxed tc
+tupleTyConBoxity tc = tupleSortBoxity (tyConTupleSort tc)
+
+-- | Extract the 'TupleSort' of the given 'TyCon', if it is a 'TupleTyCon'.
+-- Panics otherwise
+tupleTyConSort :: TyCon -> TupleSort
+tupleTyConSort tc = tyConTupleSort tc
 
 -- | Extract the arity of the given 'TyCon', if it is a 'TupleTyCon'.
 -- Panics otherwise

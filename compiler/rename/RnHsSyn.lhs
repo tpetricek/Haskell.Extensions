@@ -21,7 +21,7 @@ import Class            ( FunDep )
 import TysWiredIn       ( tupleTyCon, listTyCon, parrTyCon, charTyCon )
 import Name             ( Name, getName, isTyVarName )
 import NameSet
-import BasicTypes       ( Boxity )
+import BasicTypes       ( TupleSort )
 import SrcLoc
 \end{code}
 
@@ -39,8 +39,8 @@ charTyCon_name    = getName charTyCon
 listTyCon_name    = getName listTyCon
 parrTyCon_name    = getName parrTyCon
 
-tupleTyCon_name :: Boxity -> Int -> Name
-tupleTyCon_name boxity n = getName (tupleTyCon boxity n)
+tupleTyCon_name :: TupleSort -> Int -> Name
+tupleTyCon_name sort n = getName (tupleTyCon sort n)
 
 extractHsTyVars :: LHsType Name -> NameSet
 extractHsTyVars x = filterNameSet isTyVarName (extractHsTyNames x)

@@ -300,6 +300,18 @@ kc_check_hs_type ty@(HsAppTy ty1 ty2) exp_kind
        ; arg_tys' <- kcCheckApps fun_ty fun_kind arg_tys ty exp_kind
        ; return (mkHsAppTys fun_ty' arg_tys') }
 
+-- A hack of sorts: in the users source code, they can only write boxed
+-- or unboxed tuple types. But in some contexts they really "mean" to write
+-- tuples with Fact components!
+--
+-- This special case of kind-checking does this rewriting when we can detect
+-- that we need it.
+--
+-- If we *infer* the kind of a tuple we always get the normal lifted tuple kind.
+kc_check_hs_type (HsTupleTy BoxedTuple tys) exp_kind@(EK kind _) | kind `eqKind` factKind = do
+    tys' <- mapM (flip kc_check_lhs_type exp_kind) tys
+    return (HsTupleTy FactTuple tys')
+
 -- This is the general case: infer the kind and compare
 kc_check_hs_type ty exp_kind
   = do	{ (ty', act_kind) <- kc_hs_type ty
@@ -364,13 +376,17 @@ kc_hs_type (HsKindSig ty k) = do
     ty' <- kc_check_lhs_type ty (EK k EkKindSig)
     return (HsKindSig ty' k, k)
 
-kc_hs_type (HsTupleTy Boxed tys) = do
+kc_hs_type (HsTupleTy BoxedTuple tys) = do
     tys' <- mapM kcLiftedType tys
-    return (HsTupleTy Boxed tys', liftedTypeKind)
+    return (HsTupleTy BoxedTuple tys', liftedTypeKind)
 
-kc_hs_type (HsTupleTy Unboxed tys) = do
+kc_hs_type (HsTupleTy UnboxedTuple tys) = do
     tys' <- mapM kcTypeType tys
-    return (HsTupleTy Unboxed tys', ubxTupleKind)
+    return (HsTupleTy UnboxedTuple tys', ubxTupleKind)
+
+kc_hs_type (HsTupleTy FactTuple tys) = do
+    tys' <- mapM (flip kc_check_lhs_type ekFact) tys
+    return (HsTupleTy FactTuple tys', factKind)
 
 kc_hs_type (HsFunTy ty1 ty2) = do
     ty1' <- kc_check_lhs_type ty1 (EK argTypeKind EkUnk)

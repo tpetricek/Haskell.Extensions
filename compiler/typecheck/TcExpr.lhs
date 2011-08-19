@@ -325,7 +325,7 @@ tcExpr (SectionL arg1 op) res_ty
 
 tcExpr (ExplicitTuple tup_args boxity) res_ty
   | all tupArgPresent tup_args
-  = do { let tup_tc = tupleTyCon boxity (length tup_args)
+  = do { let tup_tc = tupleTyCon (boxityNormalTupleSort boxity) (length tup_args)
        ; (coi, arg_tys) <- matchExpectedTyConAppWrap tup_tc res_ty
        ; tup_args1 <- tcTupArgs tup_args arg_tys
        ; return $ mkHsWrapCo coi (ExplicitTuple tup_args1 boxity) }
@@ -335,7 +335,7 @@ tcExpr (ExplicitTuple tup_args boxity) res_ty
     do { let kind = case boxity of { Boxed   -> liftedTypeKind
                                    ; Unboxed -> argTypeKind }
              arity = length tup_args 
-             tup_tc = tupleTyCon boxity arity
+             tup_tc = tupleTyCon (boxityNormalTupleSort boxity) arity
 
        ; arg_tys <- newFlexiTyVarTys (tyConArity tup_tc) kind
        ; let actual_res_ty

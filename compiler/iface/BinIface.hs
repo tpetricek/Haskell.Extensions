@@ -651,23 +651,16 @@ instance Binary HsBang where
 	      2 -> do return HsUnpack
 	      _ -> do return HsUnpackFailed
 
-instance Binary Boxity where
-    put_ bh Boxed   = putByte bh 0
-    put_ bh Unboxed = putByte bh 1
+instance Binary TupleSort where
+    put_ bh BoxedTuple   = putByte bh 0
+    put_ bh UnboxedTuple = putByte bh 1
+    put_ bh FactTuple    = putByte bh 2
     get bh = do
-	    h <- getByte bh
-	    case h of
-	      0 -> do return Boxed
-	      _ -> do return Unboxed
-
-instance Binary TupCon where
-    put_ bh (TupCon ab ac) = do
-	    put_ bh ab
-	    put_ bh ac
-    get bh = do
-	  ab <- get bh
-	  ac <- get bh
-	  return (TupCon ab ac)
+      h <- getByte bh
+      case h of
+        0 -> do return BoxedTuple
+        1 -> do return UnboxedTuple
+        _ -> do return FactTuple
 
 instance Binary RecFlag where
     put_ bh Recursive = do
@@ -903,8 +896,8 @@ instance Binary IfaceType where
     put_ bh (IfaceTyConApp IfaceBoolTc [])   = putByte bh 8
     put_ bh (IfaceTyConApp IfaceListTc [ty]) = do { putByte bh 9; put_ bh ty }
 	-- Unit tuple and pairs
-    put_ bh (IfaceTyConApp (IfaceTupTc Boxed 0) []) 	 = putByte bh 10
-    put_ bh (IfaceTyConApp (IfaceTupTc Boxed 2) [t1,t2]) = do { putByte bh 11; put_ bh t1; put_ bh t2 }
+    put_ bh (IfaceTyConApp (IfaceTupTc BoxedTuple 0) []) 	 = putByte bh 10
+    put_ bh (IfaceTyConApp (IfaceTupTc BoxedTuple 2) [t1,t2]) = do { putByte bh 11; put_ bh t1; put_ bh t2 }
         -- Kind cases
     put_ bh (IfaceTyConApp IfaceLiftedTypeKindTc [])   = putByte bh 12
     put_ bh (IfaceTyConApp IfaceOpenTypeKindTc [])     = putByte bh 13
@@ -939,8 +932,8 @@ instance Binary IfaceType where
 	      7 -> return (IfaceTyConApp IfaceCharTc [])
 	      8 -> return (IfaceTyConApp IfaceBoolTc [])
 	      9 -> do { ty <- get bh; return (IfaceTyConApp IfaceListTc [ty]) }
-	      10 -> return (IfaceTyConApp (IfaceTupTc Boxed 0) [])
-	      11 -> do { t1 <- get bh; t2 <- get bh; return (IfaceTyConApp (IfaceTupTc Boxed 2) [t1,t2]) }
+	      10 -> return (IfaceTyConApp (IfaceTupTc BoxedTuple 0) [])
+	      11 -> do { t1 <- get bh; t2 <- get bh; return (IfaceTyConApp (IfaceTupTc BoxedTuple 2) [t1,t2]) }
               12 -> return (IfaceTyConApp IfaceLiftedTypeKindTc [])
               13 -> return (IfaceTyConApp IfaceOpenTypeKindTc [])
               14 -> return (IfaceTyConApp IfaceUnliftedTypeKindTc [])

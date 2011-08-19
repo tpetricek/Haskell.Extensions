@@ -163,10 +163,10 @@ lookupOrigNameCache _ mod occ
 	-- of them to pre-populate the original-name cache
     Just (mk_tup_name tup_info)
   where
-    mk_tup_name (ns, boxity, arity)
-	| ns == tcName   = tyConName (tupleTyCon boxity arity)
-	| ns == dataName = dataConName (tupleCon boxity arity)
-	| otherwise      = Var.varName (dataConWorkId (tupleCon boxity arity))
+    mk_tup_name (ns, sort, arity)
+	| ns == tcName   = tyConName (tupleTyCon sort arity)
+	| ns == dataName = dataConName (tupleCon sort arity)
+	| otherwise      = Var.varName (dataConWorkId (tupleCon sort arity))
 
 lookupOrigNameCache nc mod occ	-- The normal case
   = case lookupModuleEnv nc mod of

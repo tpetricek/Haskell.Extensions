@@ -1636,7 +1636,7 @@ toIfaceAlt (c,bs,r) = (toIfaceCon c, map getFS bs, toIfaceExpr r)
 
 ---------------------
 toIfaceCon :: AltCon -> IfaceConAlt
-toIfaceCon (DataAlt dc) | isTupleTyCon tc = IfaceTupleAlt (tupleTyConBoxity tc)
+toIfaceCon (DataAlt dc) | isTupleTyCon tc = IfaceTupleAlt (tupleTyConSort tc)
 	   		| otherwise       = IfaceDataAlt (getName dc)
 	   		where
 	   		  tc = dataConTyCon dc
@@ -1651,7 +1651,7 @@ toIfaceApp (Var v) as
   = case isDataConWorkId_maybe v of
 	-- We convert the *worker* for tuples into IfaceTuples
 	Just dc |  isTupleTyCon tc && saturated 
-		-> IfaceTuple (tupleTyConBoxity tc) tup_args
+		-> IfaceTuple (tupleTyConSort tc) tup_args
 	  where
 	    val_args  = dropWhile isTypeArg as
 	    saturated = val_args `lengthIs` idArity v

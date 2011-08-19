@@ -571,7 +571,7 @@ pprTcApp _ pp tc [ty]
 
 pprTcApp p pp tc tys
   | isTupleTyCon tc && tyConArity tc == length tys
-  = tupleParens (tupleTyConBoxity tc) (sep (punctuate comma (map (pp TopPrec) tys)))
+  = tupleParens (tupleTyConSort tc) (sep (punctuate comma (map (pp TopPrec) tys)))
   | otherwise
   = pprTypeNameApp p pp (getName tc) tys
 

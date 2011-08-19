@@ -312,7 +312,7 @@ dsExpr (ExplicitTuple tup_args boxity)
 		-- The reverse is because foldM goes left-to-right
 
        ; return $ mkCoreLams lam_vars $ 
-                  mkConApp (tupleCon boxity (length tup_args))
+                  mkConApp (tupleCon (boxityNormalTupleSort boxity) (length tup_args))
                            (map (Type . exprType) args ++ args) }
 
 dsExpr (HsSCC cc expr) = do
