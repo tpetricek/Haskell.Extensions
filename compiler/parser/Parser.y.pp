@@ -1094,6 +1094,7 @@ kind	:: { Located Kind }
 akind	:: { Located Kind }
 	: '*'			{ L1 liftedTypeKind }
 	| '!'			{ L1 unliftedTypeKind }
+	| CONID         	{% checkKindName (L1 (getCONID $1)) }
 	| '(' kind ')'		{ LL (unLoc $2) }
 
 

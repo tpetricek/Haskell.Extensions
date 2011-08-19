@@ -37,12 +37,13 @@ module RdrHsSyn (
 	checkKindSigs,	      -- [LTyClDecl RdrName] -> P ()
 	checkInstType,	      -- HsType -> P HsType
 	checkPattern,	      -- HsExp -> P HsPat
-	bang_RDR,
+        bang_RDR,
 	checkPatterns,	      -- SrcLoc -> [HsExp] -> P [HsPat]
 	checkMonadComp,       -- P (HsStmtContext RdrName)
 	checkValDef,	      -- (SrcLoc, HsExp, HsRhs, [HsDecl]) -> P HsDecl
 	checkValSig,	      -- (SrcLoc, HsExp, HsRhs, [HsDecl]) -> P HsDecl
 	checkDoAndIfThenElse,
+        checkKindName,
 	parseError,	    
 	parseErrorSDoc,	    
     ) where
@@ -52,13 +53,15 @@ import Class            ( FunDep )
 import TypeRep          ( Kind )
 import RdrName		( RdrName, isRdrTyVar, isRdrTc, mkUnqual, rdrNameOcc, 
 			  isRdrDataCon, isUnqual, getRdrName, setRdrNameSpace )
-import Name             ( Name )
+import OccName          ( occNameFS )
+import Name             ( Name, nameOccName )
 import BasicTypes	( maxPrecedence, Activation(..), RuleMatchInfo,
                           InlinePragma(..), InlineSpec(..) )
 import Lexer
-import TysWiredIn	( unitTyCon ) 
+import TysWiredIn	( unitTyCon )
+import TysPrim          ( factKindTyConName, factKind )
 import ForeignCall
-import OccName  	( srcDataName, varName, isDataOcc, isTcOcc, 
+import OccName  	( srcDataName, varName, isDataOcc, isTcOcc,
 			  occNameString )
 import PrelNames	( forall_tv_RDR )
 import DynFlags
@@ -778,6 +781,17 @@ checkDoAndIfThenElse guardExpr semiThen thenExpr semiElse elseExpr
           expr = text "if"   <+> ppr guardExpr <> pprOptSemi semiThen <+>
                  text "then" <+> ppr thenExpr  <> pprOptSemi semiElse <+>
                  text "else" <+> ppr elseExpr
+
+checkKindName :: Located FastString -> P (Located Kind)
+checkKindName (L l fs) = do
+    pState <- getPState
+    let ext_enabled = xopt Opt_ConstraintKind (dflags pState)
+        is_kosher = fs == occNameFS (nameOccName factKindTyConName)
+    if not ext_enabled || not is_kosher
+     then parseErrorSDoc l (text "Unexpected named kind:"
+                         $$ nest 4 (ppr fs)
+                         $$ if (not ext_enabled && is_kosher) then text "Perhaps you meant to use -XConstraintKind?" else empty)
+     else return (L l factKind)
 \end{code}
 
 
