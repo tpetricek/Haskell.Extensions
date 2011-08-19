@@ -300,13 +300,16 @@ mkDataConIds wrap_name wkr_name data_con
 
         ----------- Wrappers for algebraic data types -------------- 
     alg_wrap_id = mkGlobalId (DataConWrapId data_con) wrap_name wrap_ty alg_wrap_info
-    alg_wrap_info = noCafIdInfo         -- The NoCaf-ness is set by noCafIdInfo
+    alg_wrap_info = noCafIdInfo
                     `setArityInfo`         wrap_arity
                         -- It's important to specify the arity, so that partial
                         -- applications are treated as values
 		    `setInlinePragInfo`    alwaysInlinePragma
                     `setUnfoldingInfo`     wrap_unf
                     `setStrictnessInfo` Just wrap_sig
+                        -- We need to get the CAF info right here because TidyPgm
+                        -- does not tidy the IdInfo of implicit bindings (like the wrapper)
+                        -- so it not make sure that the CAF info is sane
 
     all_strict_marks = dataConExStricts data_con ++ dataConStrictMarks data_con
     wrap_sig = mkStrictSig (mkTopDmdType wrap_arg_dmds cpr_info)
@@ -337,8 +340,10 @@ mkDataConIds wrap_name wkr_name data_con
     con_app _ rep_ids = wrapFamInstBody tycon res_ty_args $
                           Var wrk_id `mkTyApps`  res_ty_args
                                      `mkVarApps` ex_tvs                 
-                                     `mkApps`  map (mkEqBox . mkReflCo . snd) eq_spec
+                                     `mkCoApps`  map (mkReflCo . snd) eq_spec
                                      `mkVarApps` reverse rep_ids
+                            -- Dont box the eq_spec coercions since they are
+                            -- marked as HsUnpack by mk_dict_strict_mark
 
     (ev_args,i2) = mkLocals 1  ev_tys
     (id_args,i3) = mkLocals i2 orig_arg_tys

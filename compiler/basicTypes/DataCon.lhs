@@ -551,7 +551,7 @@ eqSpecPreds :: [(TyVar,Type)] -> ThetaType
 eqSpecPreds spec = [ mkEqPred (mkTyVarTy tv, ty) | (tv,ty) <- spec ]
 
 mk_dict_strict_mark :: PredType -> HsBang
-mk_dict_strict_mark pred | isEqPred pred = HsStrict
+mk_dict_strict_mark pred | isEqPred pred = HsUnpack
 			 | otherwise     = HsNoBang
 
 \end{code}
