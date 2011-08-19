@@ -106,10 +106,16 @@ If you change which things are wired in, make sure you change their
 names in PrelNames, so they use wTcQual, wDataQual, etc
 
 \begin{code}
-wiredInTyCons :: [TyCon]	-- Excludes tuples, Any and implicit parameter TyCons
-                          -- (as a consequence, IfaceTyCon must represent them specially)
--- This list is used only to define PrelInfo.wiredInThings
-
+-- This list is used only to define PrelInfo.wiredInThings. That in turn
+-- is used to initialise the name environment carried around by the renamer.
+-- This means that if we look up the name of a TyCon (or its implicit binders)
+-- that occurs in this list that name will be assigned the wired-in key we
+-- define here.
+--
+-- Because of their infinite nature, this list excludes tuples, Any and implicit
+-- parameter TyCons. Instead, we have a hack in lookupOrigNameCache to deal with
+-- these names.
+wiredInTyCons :: [TyCon]
 -- It does not need to include kind constructors, because
 -- all that wiredInThings does is to initialise the Name table,
 -- and kind constructors don't appear in source code.
