@@ -7,7 +7,7 @@
 module RnTypes ( 
 	-- Type related stuff
 	rnHsType, rnLHsType, rnLHsTypes, rnContext,
-	rnHsSigType, rnHsTypeFVs, rnConDeclFields, rnLPred,
+	rnHsSigType, rnHsTypeFVs, rnConDeclFields,
         rnIPName,
 
 	-- Precence related stuff
@@ -175,9 +175,9 @@ rnHsType doc (HsAppTy ty1 ty2) = do
     ty2' <- rnLHsType doc ty2
     return (HsAppTy ty1' ty2')
 
-rnHsType doc (HsPredTy pred) = do
-    pred' <- rnPred doc pred
-    return (HsPredTy pred')
+rnHsType doc (HsIParamTy n ty) = do
+    ty' <- rnLHsType doc ty
+    return (HsIParamTy (rnIPName n) ty')
 
 rnHsType _ (HsSpliceTy sp _ k)
   = do { (sp', fvs) <- rnSplice sp	-- ToDo: deal with fvs
@@ -246,27 +246,7 @@ rnContext :: SDoc -> LHsContext RdrName -> RnM (LHsContext Name)
 rnContext doc = wrapLocM (rnContext' doc)
 
 rnContext' :: SDoc -> HsContext RdrName -> RnM (HsContext Name)
-rnContext' doc ctxt = mapM (rnLPred doc) ctxt
-
-rnLPred :: SDoc -> LHsPred RdrName -> RnM (LHsPred Name)
-rnLPred doc  = wrapLocM (rnPred doc)
-
-rnPred :: SDoc -> HsPred RdrName
-       -> IOEnv (Env TcGblEnv TcLclEnv) (HsPred Name)
-rnPred doc (HsClassP clas tys)
-  = do { clas_name <- lookupOccRn clas
-       ; tys' <- rnLHsTypes doc tys
-       ; return (HsClassP clas_name tys')
-       }
-rnPred doc (HsEqualP ty1 ty2)
-  = do { ty1' <- rnLHsType doc ty1
-       ; ty2' <- rnLHsType doc ty2
-       ; return (HsEqualP ty1' ty2')
-       }
-rnPred doc (HsIParam n ty)
-  = do { ty' <- rnLHsType doc ty
-       ; return (HsIParam (rnIPName n) ty')
-       }
+rnContext' doc ctxt = mapM (rnLHsType doc) ctxt
 
 rnIPName :: IPName RdrName -> IPName Name
 rnIPName n = IPName (tyConName (ipTyCon (fmap rdrNameOcc n)))

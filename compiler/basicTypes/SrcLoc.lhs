@@ -44,6 +44,7 @@ module SrcLoc (
 	wiredInSrcSpan,		-- Something wired into the compiler
 	srcLocSpan, realSrcLocSpan,
 	combineSrcSpans,
+        replaceLocated,
 	
 	-- ** Deconstructing SrcSpan
 	srcSpanStart, srcSpanEnd,
@@ -519,6 +520,9 @@ mkGeneralLocated s e = L (mkGeneralSrcSpan (fsLit s)) e
 
 combineLocs :: Located a -> Located b -> SrcSpan
 combineLocs a b = combineSrcSpans (getLoc a) (getLoc b)
+
+replaceLocated :: Located a -> b -> Located b
+replaceLocated a b = fmap (const b) a
 
 -- | Combine locations from two 'Located' things and add them to a third thing
 addCLoc :: Located a -> Located b -> c -> Located c

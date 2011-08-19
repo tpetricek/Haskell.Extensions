@@ -482,10 +482,9 @@ makeDerivSpecs is_boot tycl_decls inst_decls deriv_decls
           let allTyNames = [ tcdName d | L _ d <- tycl_decls, isDataDecl d ]
         -- Select only those types that derive Generic
         ; let sel_tydata = [ tcdName t | (L _ c, L _ t) <- all_tydata
-                                       , getClassName c == Just genClassName ]
+                                       , isGenClassName c ]
         ; let sel_deriv_decls = catMaybes [ getTypeName t
-                                  | L _ (DerivDecl (L _ t)) <- deriv_decls
-                                  , getClassName t == Just genClassName ] 
+                                  | L _ (DerivDecl (L _ t)) <- deriv_decls ] 
         ; derTyDecls <- mapM tcLookupTyCon $ 
                          filter (needsExtras xDerRep
                                   (sel_tydata ++ sel_deriv_decls)) allTyNames
@@ -504,25 +503,21 @@ makeDerivSpecs is_boot tycl_decls inst_decls deriv_decls
       -- deriving Generic
     needsExtras xDerRep tydata tc_name = xDerRep && tc_name `elem` tydata
 
-    -- Extracts the name of the class in the deriving
-    getClassName :: HsType Name -> Maybe Name
-    getClassName (HsForAllTy _ _ _ (L _ n)) = getClassName n
-    getClassName (HsPredTy (HsClassP n _))  = Just n
-    getClassName _                          = Nothing
+    -- Extracts the name of the class in the deriving and makes sure it is ours
+    isGenClassName :: HsType Name -> Bool
+    isGenClassName ty = case splitHsInstDeclTy_maybe ty of
+        Just (_, _, cls_name, _) -> cls_name == genClassName
+        _                        -> False
 
     -- Extracts the name of the type in the deriving
     -- This function (and also getClassName above) is not really nice, and I
     -- might not have covered all possible cases. I wonder if there is no easier
     -- way to extract class and type name from a LDerivDecl...
     getTypeName :: HsType Name -> Maybe Name
-    getTypeName (HsForAllTy _ _ _ (L _ n))      = getTypeName n
-    getTypeName (HsTyVar n)                     = Just n
-    getTypeName (HsOpTy _ (L _ n) _)            = Just n
-    getTypeName (HsPredTy (HsClassP _ [L _ n])) = getTypeName n
-    getTypeName (HsAppTy (L _ n) _)             = getTypeName n
-    getTypeName (HsParTy (L _ n))               = getTypeName n
-    getTypeName (HsKindSig (L _ n) _)           = getTypeName n
-    getTypeName _                               = Nothing
+    getTypeName ty = do
+        (_, _, cls_name, [ty]) <- splitHsInstDeclTy_maybe ty
+        guard (cls_name == genClassName)
+        fmap fst $ splitHsClassTy_maybe (unLoc ty)
 
     extractTyDataPreds decls
       = [(p, d) | d@(L _ (TyData {tcdDerivs = Just preds})) <- decls, p <- preds]

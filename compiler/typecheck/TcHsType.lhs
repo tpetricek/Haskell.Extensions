@@ -16,7 +16,7 @@ module TcHsType (
 	
 		-- Typechecking kinded types
 	tcHsKindedContext, tcHsKindedType, tcHsBangType,
-	tcTyVarBndrs, dsHsType, kcHsLPred, dsHsLPred,
+	tcTyVarBndrs, dsHsType,
 	tcDataKindSig, ExpKind(..), EkCtxt(..),
 
 		-- Pattern type signatures
@@ -160,30 +160,25 @@ tcHsInstHead :: LHsType Name -> TcM ([TyVar], ThetaType, Class, [Type])
 tcHsInstHead (L loc hs_ty)
   = setSrcSpan loc   $	-- No need for an "In the type..." context
                         -- because that comes from the caller
-    do { kinded_ty <- kc_inst_head hs_ty
-       ; ds_inst_head kinded_ty }
+    kc_ds_inst_head hs_ty
   where
-    kc_inst_head ty@(HsPredTy pred@(HsClassP {}))
-      = do { (pred', kind) <- kc_pred pred
-           ; checkExpectedKind ty kind ekFact
-           ; return (HsPredTy pred') }
-    kc_inst_head (HsForAllTy exp tv_names context (L loc ty))
-      = kcHsTyVars tv_names         $ \ tv_names' ->
-        do { ctxt' <- kcHsContext context
-           ; ty'   <- kc_inst_head ty
-           ; return (HsForAllTy exp tv_names' ctxt' (L loc ty')) }
-    kc_inst_head _ = failWithTc (ptext (sLit "Malformed instance type"))
-
-    ds_inst_head (HsPredTy (HsClassP cls_name tys))
-      = do { clas <- tcLookupClass cls_name
-           ; arg_tys <- dsHsTypes tys
-           ; return ([], [], clas, arg_tys) }
-    ds_inst_head (HsForAllTy _ tvs ctxt (L _ tau))
-      = tcTyVarBndrs tvs  $ \ tvs' ->
-        do { ctxt' <- mapM dsHsLPred (unLoc ctxt)
-           ; (tvs_r, ctxt_r, cls, tys) <- ds_inst_head tau
-           ; return (tvs' ++ tvs_r, ctxt' ++ ctxt_r , cls, tys) }
-    ds_inst_head _ = panic "ds_inst_head"
+    kc_ds_inst_head ty = case splitHsForAllTy_maybe ty of
+        (tv_names, ctxt, cls_ty)
+          | Just (cls_name, tys) <- splitHsClassTy_maybe cls_ty
+          -> do -- Kind-checking first
+                (tvs, ctxt, cls_ty) <- kcHsTyVars tv_names $ \ tv_names' -> do
+                  ctxt' <- mapM kcHsLPredType ctxt
+                  cls_ty' <- kc_check_hs_type cls_ty ekFact
+                     -- The body of a forall is usually lifted, but in an instance
+                     -- head we only allow something of kind Fact.
+                  return (tv_names', ctxt', cls_ty')
+                -- Now desugar the kind-checked type
+                tcTyVarBndrs tvs  $ \ tvs' -> do
+                  ctxt' <- dsHsTypes ctxt
+                  clas <- tcLookupClass cls_name
+                  tys' <- dsHsTypes tys
+                  return (tvs', ctxt', clas, tys')
+        _ -> failWithTc (ptext (sLit "Malformed instance type"))
 
 tcHsQuantifiedType :: [LHsTyVarBndr Name] -> LHsType Name -> TcM ([TyVar], Type)
 -- Behave very like type-checking (HsForAllTy sig_tvs hs_ty),
@@ -201,23 +196,24 @@ tcHsDeriv = tc_hs_deriv []
 
 tc_hs_deriv :: [LHsTyVarBndr Name] -> HsType Name
             -> TcM ([TyVar], Class, [Type])
-tc_hs_deriv tv_names (HsPredTy (HsClassP cls_name hs_tys))
-  = kcHsTyVars tv_names 		$ \ tv_names' ->
-    do	{ cls_kind <- kcClass cls_name
-	; (tys, _res_kind) <- kcApps cls_name cls_kind hs_tys
-	; tcTyVarBndrs tv_names'	$ \ tyvars ->
-    do	{ arg_tys <- dsHsTypes tys
-	; cls <- tcLookupClass cls_name
-	; return (tyvars, cls, arg_tys) }}
-
 tc_hs_deriv tv_names1 (HsForAllTy _ tv_names2 (L _ []) (L _ ty))
   = 	-- Funny newtype deriving form
 	-- 	forall a. C [a]
 	-- where C has arity 2.  Hence can't use regular functions
     tc_hs_deriv (tv_names1 ++ tv_names2) ty
 
-tc_hs_deriv _ other
-  = failWithTc (ptext (sLit "Illegal deriving item") <+> ppr other)
+tc_hs_deriv tv_names ty
+  | Just (cls_name, hs_tys) <- splitHsClassTy_maybe ty
+  = kcHsTyVars tv_names                 $ \ tv_names' ->
+    do  { cls_kind <- kcClass cls_name
+        ; (tys, _res_kind) <- kcApps cls_name cls_kind hs_tys
+        ; tcTyVarBndrs tv_names'        $ \ tyvars ->
+    do  { arg_tys <- dsHsTypes tys
+        ; cls <- tcLookupClass cls_name
+        ; return (tyvars, cls, arg_tys) }}
+
+  | otherwise
+  = failWithTc (ptext (sLit "Illegal deriving item") <+> ppr ty)
 \end{code}
 
 	These functions are used during knot-tying in
@@ -245,7 +241,7 @@ tcHsBangType ty                    = tcHsKindedType ty
 tcHsKindedContext :: LHsContext Name -> TcM ThetaType
 -- Used when we are expecting a ClassContext (i.e. no implicit params)
 -- Does not do validity checking, like tcHsKindedType
-tcHsKindedContext hs_theta = addLocM (mapM dsHsLPred) hs_theta
+tcHsKindedContext hs_theta = addLocM (mapM dsHsType) hs_theta
 \end{code}
 
 
@@ -392,8 +388,9 @@ kc_hs_type (HsAppTy ty1 ty2) = do
     (arg_tys', res_kind) <- kcApps fun_ty fun_kind arg_tys
     return (mkHsAppTys fun_ty' arg_tys', res_kind)
 
-kc_hs_type (HsPredTy pred)
-  = wrongPredErr pred
+kc_hs_type (HsIParamTy n ty) = do
+    ty' <- kc_check_lhs_type ty (EK argTypeKind EkIParam)
+    return (HsIParamTy n ty', factKind)
 
 kc_hs_type (HsCoreTy ty)
   = return (HsCoreTy ty, typeKind ty)
@@ -473,34 +470,10 @@ splitFunKind the_fun arg_no fk (arg:args)
 
 ---------------------------
 kcHsContext :: LHsContext Name -> TcM (LHsContext Name)
-kcHsContext ctxt = wrapLocM (mapM kcHsLPred) ctxt
+kcHsContext ctxt = wrapLocM (mapM kcHsLPredType) ctxt
 
-kcHsLPred :: LHsPred Name -> TcM (LHsPred Name)
-kcHsLPred = wrapLocM kcHsPred
-
-kcHsPred :: HsPred Name -> TcM (HsPred Name)
-kcHsPred pred = do      -- Checks that the result is of kind Fact
-    (pred', kind) <- kc_pred pred
-    checkExpectedKind pred kind ekFact
-    return pred'
-    
----------------------------
-kc_pred :: HsPred Name -> TcM (HsPred Name, TcKind)	
-	-- Does *not* check for a saturated
-	-- application (reason: used from TcDeriv)
-kc_pred (HsIParam name ty)
-  = do { (ty', kind) <- kc_lhs_type ty
-       ; checkExpectedKind ty kind (EK argTypeKind EkIParam)
-       ; return (HsIParam name ty', factKind) }
-kc_pred (HsClassP cls tys)
-  = do { kind <- kcClass cls
-       ; (tys', res_kind) <- kcApps cls kind tys
-       ; return (HsClassP cls tys', res_kind) }
-kc_pred (HsEqualP ty1 ty2)
-  = do { (ty1', kind1) <- kc_lhs_type ty1
-       ; (ty2', kind2) <- kc_lhs_type ty2
-       ; checkExpectedKind ty2 kind2 (EK kind1 EkEqPred)
-       ; return (HsEqualP ty1' ty2', factKind) }
+kcHsLPredType :: LHsType Name -> TcM (LHsType Name)
+kcHsLPredType pred = kc_check_lhs_type pred ekFact
 
 ---------------------------
 kcTyVar :: Name -> TcM TcKind
@@ -592,12 +565,13 @@ ds_type (HsOpTy ty1 (L span op) ty2) = do
 ds_type ty@(HsAppTy _ _)
   = ds_app ty []
 
-ds_type (HsPredTy pred)
-  = dsHsPred pred
+ds_type (HsIParamTy n ty) = do
+    tau_ty <- dsHsType ty
+    return (mkIPPred n tau_ty)
 
 ds_type (HsForAllTy _ tv_names ctxt ty)
   = tcTyVarBndrs tv_names               $ \ tyvars -> do
-    theta <- mapM dsHsLPred (unLoc ctxt)
+    theta <- mapM dsHsType (unLoc ctxt)
     tau <- dsHsType ty
     return (mkSigmaTy tyvars theta tau)
 
@@ -639,36 +613,10 @@ ds_var_app name arg_tys = do
 	_                   -> wrongThingErr "type" thing name
 \end{code}
 
-
-Contexts
-~~~~~~~~
-
-\begin{code}
-dsHsLPred :: LHsPred Name -> TcM PredType
-dsHsLPred pred = dsHsPred (unLoc pred)
-
-dsHsPred :: HsPred Name -> TcM PredType
-dsHsPred (HsClassP class_name tys)
-  = do { arg_tys <- dsHsTypes tys
-       ; clas_tc <- tcLookupTyCon class_name
-       ; return (mkTyConApp clas_tc arg_tys)
-       }
-dsHsPred (HsEqualP ty1 ty2)
-  = do { arg_ty1 <- dsHsType ty1
-       ; arg_ty2 <- dsHsType ty2
-       ; return (mkEqPred (arg_ty1, arg_ty2))
-       }
-dsHsPred (HsIParam name ty)
-  = do { arg_ty <- dsHsType ty
-       ; return (mkIPPred name arg_ty)
-       }
-\end{code}
-
 \begin{code}
 addKcTypeCtxt :: LHsType Name -> TcM a -> TcM a
 	-- Wrap a context around only if we want to show that contexts.  
-addKcTypeCtxt (L _ (HsPredTy _)) thing = thing
-	-- Omit invisble ones and ones user's won't grok (HsPred p).
+	-- Omit invisble ones and ones user's won't grok
 addKcTypeCtxt (L _ other_ty) thing = addErrCtxt (typeCtxt other_ty) thing
 
 typeCtxt :: HsType Name -> SDoc
@@ -1021,7 +969,7 @@ dupInScope n n' _
        2 (vcat [ptext (sLit "are bound to the same type (variable)"),
 		ptext (sLit "Distinct scoped type variables must be distinct")])
 
-wrongPredErr :: HsPred Name -> TcM (HsType Name, TcKind)
+wrongPredErr :: Outputable a => a -> TcM (HsType Name, TcKind)
 wrongPredErr pred = failWithTc (text "Predicate used as a type:" <+> ppr pred)
 \end{code}
 

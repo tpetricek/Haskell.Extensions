@@ -11,7 +11,7 @@ files for imported data types.
 \begin{code}
 module TcTyDecls(
         calcRecFlags,
-        calcClassCycles, calcSynCycles
+        calcSynCycles
     ) where
 
 #include "HsVersions.h"
@@ -109,17 +109,6 @@ calcSynCycles decls
 
     mk_syn_edges rhs = [ tc | tc <- nameSetToList (extractHsTyNames rhs),
                               not (isTyVarName tc) ]
-
-
-calcClassCycles :: [LTyClDecl Name] -> [[LTyClDecl Name]]
-calcClassCycles decls
-  = [decls | CyclicSCC decls <- stronglyConnCompFromEdgedVertices cls_edges]
-  where
-    cls_edges = [ (ldecl, unLoc (tcdLName decl),
-                          mk_cls_edges (unLoc (tcdCtxt decl)))
-                | ldecl@(L _ decl) <- decls, isClassDecl decl ]
-
-    mk_cls_edges ctxt = [ cls | L _ (HsClassP cls _) <- ctxt ]
 \end{code}
 
 

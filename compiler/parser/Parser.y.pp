@@ -965,7 +965,7 @@ ctype	:: { LHsType RdrName }
 	: 'forall' tv_bndrs '.' ctype	{ LL $ mkExplicitHsForAllTy $2 (noLoc []) $4 }
 	| context '=>' ctype		{ LL $ mkImplicitHsForAllTy   $1 $3 }
 	-- A type of form (context => type) is an *implicit* HsForAllTy
-	| ipvar '::' type		{ LL (HsPredTy (HsIParam (unLoc $1) $3)) }
+	| ipvar '::' type		{ LL (HsIParamTy (unLoc $1) $3) }
 	| type  			{ $1 }
 
 ----------------------
@@ -983,7 +983,7 @@ ctypedoc :: { LHsType RdrName }
 	: 'forall' tv_bndrs '.' ctypedoc	{ LL $ mkExplicitHsForAllTy $2 (noLoc []) $4 }
 	| context '=>' ctypedoc		{ LL $ mkImplicitHsForAllTy   $1 $3 }
 	-- A type of form (context => type) is an *implicit* HsForAllTy
-	| ipvar '::' type		{ LL (HsPredTy (HsIParam (unLoc $1) $3)) }
+	| ipvar '::' type		{ LL (HsIParamTy (unLoc $1) $3) }
 	| typedoc			{ $1 }
 
 ----------------------
@@ -999,7 +999,7 @@ ctypedoc :: { LHsType RdrName }
 -- but not 	                    f :: ?x::Int => blah
 context :: { LHsContext RdrName }
         : btype '~'      btype  	{% checkContext
-					     (LL $ HsPredTy (HsEqualP $1 $3)) }
+					     (LL $ HsOpTy $1 (replaceLocated $2 eqTyCon_RDR) $3) }
 	| btype 			{% checkContext $1 }
 
 type :: { LHsType RdrName }
@@ -1007,7 +1007,7 @@ type :: { LHsType RdrName }
         | btype qtyconop type           { LL $ HsOpTy $1 $2 $3 }
         | btype tyvarop  type     	{ LL $ HsOpTy $1 $2 $3 }
  	| btype '->'     ctype		{ LL $ HsFunTy $1 $3 }
-        | btype '~'      btype  	{ LL $ HsPredTy (HsEqualP $1 $3) }
+        | btype '~'      btype  	{ LL $ HsOpTy $1 (replaceLocated $2 eqTyCon_RDR) $3 }
 
 typedoc :: { LHsType RdrName }
         : btype                          { $1 }
@@ -1018,7 +1018,7 @@ typedoc :: { LHsType RdrName }
         | btype tyvarop  type docprev    { LL $ HsDocTy (L (comb3 $1 $2 $3) (HsOpTy $1 $2 $3)) $4 }
         | btype '->'     ctypedoc        { LL $ HsFunTy $1 $3 }
         | btype docprev '->' ctypedoc    { LL $ HsFunTy (L (comb2 $1 $2) (HsDocTy $1 $2)) $4 }
-        | btype '~'      btype           { LL $ HsPredTy (HsEqualP $1 $3) }
+        | btype '~'      btype           { LL $ HsOpTy $1 (replaceLocated $2 eqTyCon_RDR) $3 }
 
 btype :: { LHsType RdrName }
 	: btype atype			{ LL $ HsAppTy $1 $2 }

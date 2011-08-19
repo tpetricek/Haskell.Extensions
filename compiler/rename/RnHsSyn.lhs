@@ -8,7 +8,7 @@ module RnHsSyn(
         -- Names
         charTyCon_name, listTyCon_name, parrTyCon_name, tupleTyCon_name,
         extractHsTyVars, extractHsTyNames, extractHsTyNames_s,
-        extractFunDepNames, extractHsCtxtTyNames, extractHsPredTyNames,
+        extractFunDepNames, extractHsCtxtTyNames,
 
         -- Free variables
         hsSigsFVs, hsSigFVs, conDeclFVs, bangTyFVs
@@ -59,7 +59,7 @@ extractHsTyNames ty
     get (HsPArrTy ty)          = unitNameSet parrTyCon_name `unionNameSets` getl ty
     get (HsTupleTy _ tys)      = extractHsTyNames_s tys
     get (HsFunTy ty1 ty2)      = getl ty1 `unionNameSets` getl ty2
-    get (HsPredTy p)           = extractHsPredTyNames p
+    get (HsIParamTy _ ty)      = getl ty
     get (HsOpTy ty1 op ty2)    = getl ty1 `unionNameSets` getl ty2 `unionNameSets` unitNameSet (unLoc op)
     get (HsParTy ty)           = getl ty
     get (HsBangTy _ ty)        = getl ty
@@ -82,17 +82,7 @@ extractHsTyNames_s tys = foldr (unionNameSets . extractHsTyNames) emptyNameSet t
 
 extractHsCtxtTyNames :: LHsContext Name -> NameSet
 extractHsCtxtTyNames (L _ ctxt)
-  = foldr (unionNameSets . extractHsPredTyNames . unLoc) emptyNameSet ctxt
-
--- You don't import or export implicit parameters,
--- so don't mention the IP names
-extractHsPredTyNames :: HsPred Name -> NameSet
-extractHsPredTyNames (HsClassP cls tys)
-  = unitNameSet cls `unionNameSets` extractHsTyNames_s tys
-extractHsPredTyNames (HsEqualP ty1 ty2)
-  = extractHsTyNames ty1 `unionNameSets` extractHsTyNames ty2
-extractHsPredTyNames (HsIParam _ ty)
-  = extractHsTyNames ty
+  = foldr (unionNameSets . extractHsTyNames) emptyNameSet ctxt
 \end{code}
 
 

@@ -213,9 +213,6 @@ kcTyClDecls1 decls
 	; mod <- getModule
 	; traceTc "tcTyAndCl" (ptext (sLit "module") <+> ppr mod $$ vcat (map ppr decls))
 
-        	-- First check for cyclic classes
-	; checkClassCycleErrs alg_decls
-
 	   -- Kind checking; see Note [Kind checking for type and class decls]
 	; alg_kinds <- mapM getInitialKind alg_at_decls
 	; tcExtendKindEnv alg_kinds $  do
@@ -793,17 +790,6 @@ Validity checking is done once the mutually-recursive knot has been
 tied, so we can look at things freely.
 
 \begin{code}
-checkClassCycleErrs :: [LTyClDecl Name] -> TcM ()
-checkClassCycleErrs tyclss
-  | null cls_cycles
-  = return ()
-  | otherwise
-  = do	{ mapM_ recClsErr cls_cycles
-	; failM	}	-- Give up now, because later checkValidTyCl
-			-- will loop if the synonym is recursive
-  where
-    cls_cycles = calcClassCycles tyclss
-
 checkValidTyCl :: TyClDecl Name -> TcM ()
 -- We do the validity check over declarations, rather than TyThings
 -- only so that we can add a nice context with tcAddDeclCtxt
@@ -1281,15 +1267,6 @@ recSynErr syn_decls
   where
     sorted_decls = sortLocated syn_decls
     ppr_decl (L loc decl) = ppr loc <> colon <+> ppr decl
-
-recClsErr :: [Located (TyClDecl Name)] -> TcRn ()
-recClsErr cls_decls
-  = setSrcSpan (getLoc (head sorted_decls)) $
-    addErr (sep [ptext (sLit "Cycle in class declarations (via superclasses):"),
-		 nest 2 (vcat (map ppr_decl sorted_decls))])
-  where
-    sorted_decls = sortLocated cls_decls
-    ppr_decl (L loc decl) = ppr loc <> colon <+> ppr (decl { tcdSigs = [] })
 
 sortLocated :: [Located a] -> [Located a]
 sortLocated things = sortLe le things

@@ -1388,9 +1388,8 @@ Note carefullly:
 instDeclCtxt1 :: LHsType Name -> SDoc
 instDeclCtxt1 hs_inst_ty
   = inst_decl_ctxt (case unLoc hs_inst_ty of
-                        HsForAllTy _ _ _ (L _ (HsPredTy pred)) -> ppr pred
-                        HsPredTy pred                    -> ppr pred
-                        _                                -> ppr hs_inst_ty)     -- Don't expect this
+                        HsForAllTy _ _ _ (L _ ty') -> ppr ty'
+                        _                          -> ppr hs_inst_ty)     -- Don't expect this
 instDeclCtxt2 :: Type -> SDoc
 instDeclCtxt2 dfun_ty
   = inst_decl_ctxt (ppr (mkClassPred cls tys))

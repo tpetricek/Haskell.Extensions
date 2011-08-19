@@ -444,7 +444,7 @@ rnSrcInstDecl (InstDecl inst_ty mbinds uprags ats)
 	-- The typechecker (not the renamer) checks that all 
 	-- the bindings are for the right class
     let
-	(inst_tyvars, _, cls,_) = splitHsInstDeclTy (unLoc inst_ty')
+	Just (inst_tyvars, _, cls,_) = splitHsInstDeclTy_maybe (unLoc inst_ty')
     in
     extendTyVarEnvForMethodBinds inst_tyvars (		
 	-- (Slightly strangely) the forall-d tyvars scope over
