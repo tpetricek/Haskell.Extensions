@@ -156,7 +156,8 @@ lookupOrig mod occ
 \begin{code}
 lookupOrigNameCache :: OrigNameCache -> Module -> OccName -> Maybe Name
 lookupOrigNameCache _ mod occ
-  -- XXX Why is gHC_UNIT not mentioned here?
+  -- Don't need to mention gHC_UNIT here because it is explicitly
+  -- included in TysWiredIn.wiredInTyCons
   | mod == gHC_TUPLE || mod == gHC_PRIM,		-- Boxed tuples from one, 
     Just tup_info <- isTupleOcc_maybe occ	-- unboxed from the other
   = 	-- Special case for tuples; there are too many
