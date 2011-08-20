@@ -448,7 +448,7 @@ canEq fl eqv (FunTy s1 t1) (FunTy s2 t2)
                       do { argeqv <- newEqVar s1 s2
                          ; setEqBindWithEqs argeqv (fmapMk (mkNthCo 0) (mkEqVarCo eqv))
                          ; reseqv <- newEqVar t1 t2
-                         ; setEqBindWithEqs argeqv (fmapMk (mkNthCo 1) (mkEqVarCo eqv))
+                         ; setEqBindWithEqs reseqv (fmapMk (mkNthCo 1) (mkEqVarCo eqv))
                          ; return (argeqv,reseqv) } 
 
              else -- Derived 
@@ -483,7 +483,7 @@ canEq fl eqv (TyConApp tc1 tys1) (TyConApp tc2 tys2)
                 else if isGivenOrSolved fl then
                     let go_one ty1 ty2 n = do
                           argeqv <- newEqVar ty1 ty2
-                          setEqBindWithEqs eqv (fmapMk (mkNthCo n) (mkEqVarCo eqv))
+                          setEqBindWithEqs argeqv (fmapMk (mkNthCo n) (mkEqVarCo eqv))
                           return argeqv
                     in zipWith3M go_one tys1 tys2 [0..]
 
