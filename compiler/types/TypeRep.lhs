@@ -495,10 +495,13 @@ ppr_type p (AppTy t1 t2) = maybeParen p TyConPrec $
 			   pprType t1 <+> ppr_type TyConPrec t2
 
 ppr_type p ty@(ForAllTy {})        = ppr_forall_type p ty
-ppr_type p ty@(FunTy ty1 ty2)
-  | isPredTy ty1 = ppr_forall_type p ty
-  | otherwise    = maybeParen p FunPrec $
-                     sep [ppr_type FunPrec ty1, arrow <+> ppr_type TopPrec ty2]
+ppr_type p (FunTy ty1 ty2)
+  = pprArrowChain p (ppr_type FunPrec ty1 : ppr_fun_tail ty2)
+  where
+    -- We don't want to lose synonyms, so we mustn't use splitFunTys here.
+    ppr_fun_tail (FunTy ty1 ty2)
+      | not (isPredTy ty1) = ppr_type FunPrec ty1 : ppr_fun_tail ty2
+    ppr_fun_tail other_ty = [ppr_type TopPrec other_ty]
 
 ppr_forall_type :: Prec -> Type -> SDoc
 ppr_forall_type p ty
@@ -572,6 +575,10 @@ pprTcApp _ pp tc [ty]
 pprTcApp p pp tc tys
   | isTupleTyCon tc && tyConArity tc == length tys
   = tupleParens (tupleTyConSort tc) (sep (punctuate comma (map (pp TopPrec) tys)))
+  | tc `hasKey` eqTyConKey -- We need to special case the type equality TyCon because
+                           -- its not a SymOcc so won't get printed infix
+  , [ty1,ty2] <- tys
+  = pprInfixApp p pp (getName tc) ty1 ty2
   | otherwise
   = pprTypeNameApp p pp (getName tc) tys
 
@@ -586,14 +593,18 @@ pprTypeNameApp :: Prec -> (Prec -> a -> SDoc) -> Name -> [a] -> SDoc
 pprTypeNameApp p pp tc tys
   | is_sym_occ           -- Print infix if possible
   , [ty1,ty2] <- tys  -- We know nothing of precedence though
-  = maybeParen p FunPrec $
-    sep [pp FunPrec ty1, pprInfixVar True (ppr tc) <+> pp FunPrec ty2]
+  = pprInfixApp p pp tc ty1 ty2
   | otherwise
   = pprPrefixApp p (pprPrefixVar is_sym_occ (ppr tc)) (map (pp TyConPrec) tys)
   where
     is_sym_occ = isSymOcc (getOccName tc)
 
 ----------------
+pprInfixApp :: Prec -> (Prec -> a -> SDoc) -> Name -> a -> a -> SDoc
+pprInfixApp p pp tc ty1 ty2
+  = maybeParen p FunPrec $
+    sep [pp FunPrec ty1, pprInfixVar True (ppr tc) <+> pp FunPrec ty2]
+
 pprPrefixApp :: Prec -> SDoc -> [SDoc] -> SDoc
 pprPrefixApp p pp_fun pp_tys = maybeParen p TyConPrec $
                                hang pp_fun 2 (sep pp_tys)
