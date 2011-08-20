@@ -40,6 +40,7 @@ import TcType
 import Type
 import Coercion
 import Inst
+import Kind     ( isFactKind, isFactKindCon )
 import TyCon
 import TysWiredIn
 import Var
@@ -1133,6 +1134,14 @@ addSubCtxt orig actual_res_ty expected_res_ty thing_inside
 
 Unifying kinds is much, much simpler than unifying types.
 
+One small wrinkle is that as far as the user is concerned, types of kind
+Fact should only be allowed to occur where we expect *exactly* that kind.
+We SHOULD NOT allow a type of kind fact to appear in a position expecting
+one of argTypeKind or openTypeKind.
+
+The situation is different in the core of the compiler, where we are perfectly
+happy to have types of kind Fact on either end of an arrow.
+
 \begin{code}
 matchExpectedFunKind :: TcKind -> TcM (Maybe (TcKind, TcKind))
 -- Like unifyFunTy, but does not fail; instead just returns Nothing
@@ -1156,7 +1165,8 @@ unifyKind :: TcKind                 -- Expected
           -> TcM ()
 
 unifyKind (TyConApp kc1 []) (TyConApp kc2 [])
-  | isSubKindCon kc2 kc1 = return ()
+  | isSubKindCon kc2 kc1
+  , not (isFactKindCon kc2) || isFactKindCon kc1 = return ()
 
 unifyKind (FunTy a1 r1) (FunTy a2 r2)
   = do { unifyKind a2 a1; unifyKind r1 r2 }
@@ -1230,16 +1240,19 @@ kindSimpleKind orig_swapped orig_kind
 -- T v = MkT v           v must be a type
 -- T v w = MkT (v -> w)  v must not be an umboxed tuple
 
-unifyKindMisMatch :: TcKind -> TcKind -> TcM ()
+unifyKindMisMatch :: TcKind -- Expected
+                  -> TcKind -- Actual
+                  -> TcM ()
 unifyKindMisMatch ty1 ty2 = do
     ty1' <- zonkTcKind ty1
     ty2' <- zonkTcKind ty2
-    let
-	msg = hang (ptext (sLit "Couldn't match kind"))
-		   2 (sep [quotes (ppr ty1'), 
-			   ptext (sLit "against"), 
-			   quotes (ppr ty2')])
-    failWithTc msg
+    failWithTc $ case () of
+        _ | isFactKind ty2' -> text "Constraint used as a type of kind " <+> ppr ty1'
+        _ | isFactKind ty1' -> text "Type of kind " <+> ppr ty1' <+> text "used as a constraint"
+        _ -> hang (ptext (sLit "Couldn't match kind"))
+                2 (sep [quotes (ppr ty1'), 
+                        ptext (sLit "against"), 
+                        quotes (ppr ty2')])
 
 ----------------
 kindOccurCheckErr :: Var -> Type -> SDoc

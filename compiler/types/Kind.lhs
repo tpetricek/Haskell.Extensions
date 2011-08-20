@@ -29,7 +29,7 @@ module Kind (
         isLiftedTypeKind, isUnliftedTypeKind, isOpenTypeKind,
         isUbxTupleKind, isArgTypeKind, isFactKind, isKind, isTySuperKind, 
         isSuperKind, 
-        isLiftedTypeKindCon,
+        isLiftedTypeKindCon, isFactKindCon,
 
         isSubArgTypeKind, isSubOpenTypeKind, isSubKind, defaultKind,
         isSubKindCon,

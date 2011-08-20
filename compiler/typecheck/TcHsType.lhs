@@ -911,10 +911,7 @@ checkExpectedKind :: Outputable a => a -> TcKind -> ExpKind -> TcM ()
 -- checks that the actual kind act_kind is compatible
 --      with the expected kind exp_kind
 -- The first argument, ty, is used only in the error message generation
-checkExpectedKind ty act_kind (EK exp_kind ek_ctxt)
-  | act_kind `isSubKind` exp_kind -- Short cut for a very common case
-  = return ()
-  | otherwise = do
+checkExpectedKind ty act_kind (EK exp_kind ek_ctxt) = do
     (_errs, mb_r) <- tryTc (unifyKind exp_kind act_kind)
     case mb_r of
         Just _  -> return ()  -- Unification succeeded
@@ -998,8 +995,5 @@ dupInScope n n' _
   = hang (ptext (sLit "The scoped type variables") <+> quotes (ppr n) <+> ptext (sLit "and") <+> quotes (ppr n'))
        2 (vcat [ptext (sLit "are bound to the same type (variable)"),
 		ptext (sLit "Distinct scoped type variables must be distinct")])
-
-wrongPredErr :: Outputable a => a -> TcM (HsType Name, TcKind)
-wrongPredErr pred = failWithTc (text "Predicate used as a type:" <+> ppr pred)
 \end{code}
 
