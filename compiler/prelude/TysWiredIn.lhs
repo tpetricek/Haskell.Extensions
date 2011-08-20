@@ -151,8 +151,8 @@ mkWiredInDataConName built_in modu fs unique datacon
 		  built_in
 
 eqTyConName, eqBoxDataConName :: Name
-eqTyConName      = mkWiredInTyConName   UserSyntax gHC_TYPES (fsLit "~")   eqTyConKey      eqTyCon
-eqBoxDataConName = mkWiredInDataConName UserSyntax gHC_TYPES (fsLit "Eq#") eqBoxDataConKey eqBoxDataCon
+eqTyConName      = mkWiredInTyConName   BuiltInSyntax gHC_TYPES (fsLit "~")   eqTyConKey      eqTyCon
+eqBoxDataConName = mkWiredInDataConName UserSyntax 	  gHC_TYPES (fsLit "Eq#") eqBoxDataConKey eqBoxDataCon
 
 charTyConName, charDataConName, intTyConName, intDataConName :: Name
 charTyConName	  = mkWiredInTyConName   UserSyntax gHC_TYPES (fsLit "Char") charTyConKey charTyCon
