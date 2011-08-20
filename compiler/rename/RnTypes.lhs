@@ -179,6 +179,11 @@ rnHsType doc (HsIParamTy n ty) = do
     ty' <- rnLHsType doc ty
     return (HsIParamTy (rnIPName n) ty')
 
+rnHsType doc (HsEqTy ty1 ty2) = do
+    ty1' <- rnLHsType doc ty1
+    ty2' <- rnLHsType doc ty2
+    return (HsEqTy ty1' ty2')
+
 rnHsType _ (HsSpliceTy sp _ k)
   = do { (sp', fvs) <- rnSplice sp	-- ToDo: deal with fvs
        ; return (HsSpliceTy sp' fvs k) }

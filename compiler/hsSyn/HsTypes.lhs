@@ -160,6 +160,9 @@ data HsType name
   | HsIParamTy		(IPName name)    -- (?x :: ty)
                         (LHsType name)   -- Implicit parameters as they occur in contexts
 
+  | HsEqTy              (LHsType name)   -- ty1 ~ ty2
+                        (LHsType name)   -- Always allowed even without TypeOperators, and has special kinding rule
+
   | HsKindSig		(LHsType name)	-- (ty :: kind)
 			Kind		-- A type with a kind signature
 
@@ -444,6 +447,10 @@ ppr_mono_ty _    (HsPArrTy ty)	     = pabrackets (ppr_mono_lty pREC_TOP ty)
 ppr_mono_ty _    (HsIParamTy n ty)   = brackets (ppr n <+> dcolon <+> ppr_mono_lty pREC_TOP ty)
 ppr_mono_ty _    (HsSpliceTy s _ _)  = pprSplice s
 ppr_mono_ty _    (HsCoreTy ty)       = ppr ty
+
+ppr_mono_ty ctxt_prec (HsEqTy ty1 ty2)
+  = maybeParen ctxt_prec pREC_OP $
+    ppr_mono_lty pREC_OP ty1 <+> char '~' <+> ppr_mono_lty pREC_OP ty2
 
 ppr_mono_ty ctxt_prec (HsAppTy fun_ty arg_ty)
   = maybeParen ctxt_prec pREC_CON $

@@ -60,6 +60,7 @@ extractHsTyNames ty
     get (HsTupleTy _ tys)      = extractHsTyNames_s tys
     get (HsFunTy ty1 ty2)      = getl ty1 `unionNameSets` getl ty2
     get (HsIParamTy _ ty)      = getl ty
+    get (HsEqTy ty1 ty2)       = getl ty1 `unionNameSets` getl ty2
     get (HsOpTy ty1 op ty2)    = getl ty1 `unionNameSets` getl ty2 `unionNameSets` unitNameSet (unLoc op)
     get (HsParTy ty)           = getl ty
     get (HsBangTy _ ty)        = getl ty

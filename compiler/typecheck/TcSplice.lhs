@@ -975,12 +975,12 @@ illegalBracket = ptext (sLit "Template Haskell brackets cannot be nested (withou
 lookupClassInstances :: TH.Name -> [TH.Type] -> TcM [TH.ClassInstance]
 lookupClassInstances c ts
    = do { loc <- getSrcSpanM
-        ; case convertToHsPred loc (TH.ClassP c ts) of {
+        ; case convertToHsType loc (foldl TH.AppT (TH.ConT c) ts) of {
             Left msg -> failWithTc msg;
             Right rdr_pred -> do
-        { rn_pred <- rnLPred doc rdr_pred	-- Rename
-        ; kc_pred <- kcHsLPred rn_pred		-- Kind check
-        ; pred <- dsHsLPred kc_pred	-- Type check
+        { rn_pred <- rnLHsType doc rdr_pred	-- Rename
+        ; kc_pred <- kcCheckLHsType rn_pred ekFact	-- Kind check
+        ; pred <- dsHsType kc_pred	-- Type check
         ; Just (cls, tys) <- return $ getClassPredTys_maybe pred
 
 	-- Now look up instances

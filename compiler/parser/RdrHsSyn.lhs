@@ -122,6 +122,7 @@ extract_lty (L loc ty) acc
       HsTupleTy _ tys          	-> extract_ltys tys acc
       HsFunTy ty1 ty2          	-> extract_lty ty1 (extract_lty ty2 acc)
       HsIParamTy _ ty		-> extract_lty ty acc
+      HsEqTy ty1 ty2            -> extract_lty ty1 (extract_lty ty2 acc)
       HsOpTy ty1 (L loc tv) ty2 -> extract_tv loc tv (extract_lty ty1 (extract_lty ty2 acc))
       HsParTy ty               	-> extract_lty ty acc
       HsCoreTy {}               -> acc  -- The type is closed

@@ -17,7 +17,9 @@ module TcHsType (
 		-- Typechecking kinded types
 	tcHsKindedContext, tcHsKindedType, tcHsBangType,
 	tcTyVarBndrs, dsHsType,
-	tcDataKindSig, ExpKind(..), EkCtxt(..),
+	tcDataKindSig,
+
+        ExpKind(..), EkCtxt(..), ekFact,
 
 		-- Pattern type signatures
 	tcHsPatSigType, tcPatSig
@@ -164,7 +166,7 @@ tcHsInstHead (L loc hs_ty)
   where
     kc_ds_inst_head ty = case splitHsForAllTy_maybe ty of
         (tv_names, ctxt, cls_ty)
-          | Just (cls_name, tys) <- splitHsClassTy_maybe cls_ty
+          | Just _ <- splitHsClassTy_maybe cls_ty
           -> do -- Kind-checking first
                 (tvs, ctxt, cls_ty) <- kcHsTyVars tv_names $ \ tv_names' -> do
                   ctxt' <- mapM kcHsLPredType ctxt
@@ -173,6 +175,7 @@ tcHsInstHead (L loc hs_ty)
                      -- head we only allow something of kind Fact.
                   return (tv_names', ctxt', cls_ty')
                 -- Now desugar the kind-checked type
+                let Just (cls_name, tys) = splitHsClassTy_maybe cls_ty
                 tcTyVarBndrs tvs  $ \ tvs' -> do
                   ctxt' <- dsHsTypes ctxt
                   clas <- tcLookupClass cls_name
@@ -408,6 +411,12 @@ kc_hs_type (HsIParamTy n ty) = do
     ty' <- kc_check_lhs_type ty (EK argTypeKind EkIParam)
     return (HsIParamTy n ty', factKind)
 
+kc_hs_type (HsEqTy ty1 ty2) = do
+    (ty1', kind1) <- kc_lhs_type ty1
+    (ty2', kind2) <- kc_lhs_type ty2
+    checkExpectedKind ty2 kind2 (EK kind1 EkEqPred)
+    return (HsEqTy ty1' ty2', factKind)
+
 kc_hs_type (HsCoreTy ty)
   = return (HsCoreTy ty, typeKind ty)
 
@@ -584,6 +593,11 @@ ds_type ty@(HsAppTy _ _)
 ds_type (HsIParamTy n ty) = do
     tau_ty <- dsHsType ty
     return (mkIPPred n tau_ty)
+
+ds_type (HsEqTy ty1 ty2) = do
+    tau_ty1 <- dsHsType ty1
+    tau_ty2 <- dsHsType ty2
+    return (mkEqPred (tau_ty1, tau_ty2))
 
 ds_type (HsForAllTy _ tv_names ctxt ty)
   = tcTyVarBndrs tv_names               $ \ tyvars -> do
