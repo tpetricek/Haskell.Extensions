@@ -40,7 +40,7 @@ import TcType
 import Type
 import Coercion
 import Inst
-import Kind     ( isFactKind, isFactKindCon )
+import Kind     ( isFactKindCon )
 import TyCon
 import TysWiredIn
 import Var
@@ -1167,6 +1167,11 @@ unifyKind :: TcKind                 -- Expected
 unifyKind (TyConApp kc1 []) (TyConApp kc2 [])
   | isSubKindCon kc2 kc1
   , not (isFactKindCon kc2) || isFactKindCon kc1 = return ()
+   -- For the purposes of the front end ONLY, only allow
+   -- the Constraint kind to unify with itself.
+   --
+   -- This prevents the user from writing constraints types
+   -- on the left or right of an arrow.
 
 unifyKind (FunTy a1 r1) (FunTy a2 r2)
   = do { unifyKind a2 a1; unifyKind r1 r2 }
@@ -1246,13 +1251,10 @@ unifyKindMisMatch :: TcKind -- Expected
 unifyKindMisMatch ty1 ty2 = do
     ty1' <- zonkTcKind ty1
     ty2' <- zonkTcKind ty2
-    failWithTc $ case () of
-        _ | isFactKind ty2' -> text "Constraint used as a type of kind " <+> ppr ty1'
-        _ | isFactKind ty1' -> text "Type of kind " <+> ppr ty1' <+> text "used as a constraint"
-        _ -> hang (ptext (sLit "Couldn't match kind"))
-                2 (sep [quotes (ppr ty1'), 
-                        ptext (sLit "against"), 
-                        quotes (ppr ty2')])
+    failWithTc $ hang (ptext (sLit "Couldn't match kind"))
+                    2 (sep [quotes (ppr ty1'), 
+                            ptext (sLit "against"), 
+                            quotes (ppr ty2')])
 
 ----------------
 kindOccurCheckErr :: Var -> Type -> SDoc

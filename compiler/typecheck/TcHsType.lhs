@@ -40,6 +40,7 @@ import TcUnify
 import TcIface
 import TcType
 import {- Kind parts of -} Type
+import Kind ( isFactKind )
 import Var
 import VarSet
 import TyCon
@@ -931,7 +932,13 @@ checkExpectedKind ty act_kind (EK exp_kind ek_ctxt) = do
                (env1, tidy_exp_kind) = tidyKind env0 exp_kind
                (env2, tidy_act_kind) = tidyKind env1 act_kind
 
-               err | n_exp_as < n_act_as     -- E.g. [Maybe]
+               err | isFactKind tidy_act_kind
+                   = text "Predicate" <+> quotes (ppr ty) <+> text "used as a type"
+                   
+                   | isFactKind tidy_exp_kind
+                   = text "Type of kind " <+> ppr tidy_act_kind <+> text "used as a constraint"
+                   
+                   | n_exp_as < n_act_as     -- E.g. [Maybe]
                    = quotes (ppr ty) <+> ptext (sLit "is not applied to enough type arguments")
 
                      -- Now n_exp_as >= n_act_as. In the next two cases,
