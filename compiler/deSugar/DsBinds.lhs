@@ -266,11 +266,7 @@ dsEvTerm (EvTupleSel v n)
 dsEvTerm (EvTupleMk vs) = Var (dataConWorkId dc) `mkVarApps` vs
   where dc = tupleCon FactTuple (length vs)
 dsEvTerm (EvSuperClass d n)
-  = ASSERT( isClassPred (classSCTheta cls !! n) )
-    	    -- We can only select *dictionary* superclasses
-	    -- in terms.  Equality superclasses are dealt with
-	    -- in dsEvGroup, where they can generate a case expression
-    Var sc_sel_id `mkTyApps` tys `App` Var d
+  = Var sc_sel_id `mkTyApps` tys `App` Var d
   where
     sc_sel_id  = classSCSelId cls n	-- Zero-indexed
     (cls, tys) = getClassPredTys (evVarPred d)    
