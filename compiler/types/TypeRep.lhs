@@ -495,7 +495,10 @@ ppr_type p (AppTy t1 t2) = maybeParen p TyConPrec $
 			   pprType t1 <+> ppr_type TyConPrec t2
 
 ppr_type p ty@(ForAllTy {})        = ppr_forall_type p ty
-ppr_type p (FunTy ty1 ty2)
+ppr_type p fun_ty@(FunTy ty1 ty2)
+  | isPredTy ty1
+  = ppr_forall_type p fun_ty
+  | otherwise
   = pprArrowChain p (ppr_type FunPrec ty1 : ppr_fun_tail ty2)
   where
     -- We don't want to lose synonyms, so we mustn't use splitFunTys here.
