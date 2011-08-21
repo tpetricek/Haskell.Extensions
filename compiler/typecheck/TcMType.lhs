@@ -1109,7 +1109,7 @@ check_valid_theta ctxt theta = do
 
 -------------------------
 check_pred_ty :: DynFlags -> SourceTyCtxt -> PredType -> TcM ()
-check_pred_ty dflags ctxt pred = check_pred_ty' dflags ctxt (predTypePredTree pred)
+check_pred_ty dflags ctxt pred = check_pred_ty' dflags ctxt (shallowPredTypePredTree pred)
 
 check_pred_ty' :: DynFlags -> SourceTyCtxt -> PredTree -> TcM ()
 check_pred_ty' dflags ctxt (ClassPred cls tys)
@@ -1152,13 +1152,14 @@ check_pred_ty' _ SigmaCtxt (IPPred _ ty) = checkValidMonoType ty
 	-- instance decl would show up two uses of ?x.
 
 check_pred_ty' dflags ctxt t@(TuplePred ts)
-  | xopt Opt_ConstraintKind dflags = mapM_ (check_pred_ty' dflags ctxt) ts
-  | otherwise                      = failWithTc (predTupleErr (predTreePredType t) $$ how_to_allow)
+  = do { checkTc (xopt Opt_ConstraintKind dflags)
+                 (predTupleErr (predTreePredType t) $$ how_to_allow)
+       ; mapM_ (check_pred_ty' dflags ctxt) ts }
   where how_to_allow = parens (ptext (sLit "Use -XConstraintKind to permit this"))
 
 check_pred_ty' dflags _ (IrredPred pred)
-  | xopt Opt_ConstraintKind dflags = return ()
-  | otherwise                      = failWithTc (predIrredErr pred $$ how_to_allow)
+  = checkTc (xopt Opt_ConstraintKind dflags)
+            (predIrredErr pred $$ how_to_allow)
   where how_to_allow = parens (ptext (sLit "Use -XConstraintKind to permit this"))
 
 -- Catch-all
