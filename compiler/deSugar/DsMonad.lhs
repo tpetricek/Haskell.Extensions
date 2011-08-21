@@ -153,7 +153,7 @@ data DsMetaVal
    | Splice (HsExpr Id)	-- These bindings are introduced by
 			-- the PendingSplices on a HsBracketOut
 
-initDs  :: HscEnv
+initDs :: HscEnv
 	-> Module -> GlobalRdrEnv -> TypeEnv
 	-> DsM a
 	-> IO (Messages, Maybe a)

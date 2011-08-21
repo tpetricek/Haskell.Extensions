@@ -1,4 +1,4 @@
-1%
+%
 % (c) The University of Glasgow 2006
 % (c) The AQUA Project, Glasgow University, 1996-1998
 %
@@ -425,15 +425,17 @@ zonk_bind env sig_warn (AbsBinds { abs_tvs = tyvars, abs_ev_vars = evs
     	    ; new_val_binds <- zonkMonoBinds env3 noSigWarn val_binds
     	    ; new_exports   <- mapM (zonkExport env3) exports
     	    ; return (new_val_binds, new_exports) } 
-       ; sig_warn True [b | (_,b,_,_) <- new_exports]
+       ; sig_warn True (map abe_poly new_exports)
        ; return (AbsBinds { abs_tvs = tyvars, abs_ev_vars = new_evs, abs_ev_binds = new_ev_binds
 			  , abs_exports = new_exports, abs_binds = new_val_bind }) }
   where
-    zonkExport env (tyvars, global, local, prags)
-	-- The tyvars are already zonked
-	= zonkIdBndr env global			`thenM` \ new_global ->
-	  zonkSpecPrags env prags		`thenM` \ new_prags -> 
-	  returnM (tyvars, new_global, zonkIdOcc env local, new_prags)
+    zonkExport env (ABE{ abe_wrap = wrap, abe_poly = poly_id
+                       , abe_mono = mono_id, abe_prags = prags })
+	= zonkIdBndr env poly_id		`thenM` \ new_poly_id ->
+	  zonkCoFn env wrap                     `thenM` \ (_, new_wrap) ->
+          zonkSpecPrags env prags		`thenM` \ new_prags -> 
+	  returnM (ABE{ abe_wrap = new_wrap, abe_poly = new_poly_id
+                      , abe_mono = zonkIdOcc env mono_id, abe_prags = new_prags })
 
 zonkSpecPrags :: ZonkEnv -> TcSpecPrags -> TcM TcSpecPrags
 zonkSpecPrags _   IsDefaultMethod = return IsDefaultMethod
@@ -1021,19 +1023,20 @@ zonkVects :: ZonkEnv -> [LVectDecl TcId] -> TcM [LVectDecl Id]
 zonkVects env = mappM (wrapLocM (zonkVect env))
 
 zonkVect :: ZonkEnv -> VectDecl TcId -> TcM (VectDecl Id)
-zonkVect env (HsVect v Nothing)
+zonkVect env (HsVect v e)
   = do { v' <- wrapLocM (zonkIdBndr env) v
-       ; return $ HsVect v' Nothing
-       }
-zonkVect env (HsVect v (Just e))
-  = do { v' <- wrapLocM (zonkIdBndr env) v
-       ; e' <- zonkLExpr env e
-       ; return $ HsVect v' (Just e')
+       ; e' <- fmapMaybeM (zonkLExpr env) e
+       ; return $ HsVect v' e'
        }
 zonkVect env (HsNoVect v)
   = do { v' <- wrapLocM (zonkIdBndr env) v
        ; return $ HsNoVect v'
        }
+zonkVect _env (HsVectTypeOut t ty)
+  = do { ty' <- fmapMaybeM zonkTypeZapping ty
+       ; return $ HsVectTypeOut t ty'
+       }
+zonkVect _ (HsVectTypeIn _ _) = panic "TcHsSyn.zonkVect: HsVectTypeIn"
 \end{code}
 
 %************************************************************************

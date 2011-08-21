@@ -1,16 +1,15 @@
+-- Set up the data structures provided by 'Vectorise.Builtins'.
 
 module Vectorise.Builtins.Initialise (
   -- * Initialisation
   initBuiltins, initBuiltinVars, initBuiltinTyCons, initBuiltinDataCons,
-  initBuiltinPAs, initBuiltinPRs,
-  initBuiltinBoxedTyCons
+  initBuiltinPAs, initBuiltinPRs
 ) where
 
 import Vectorise.Builtins.Base
 import Vectorise.Builtins.Modules
 
 import BasicTypes
-import PrelNames
 import TysPrim
 import DsMonad
 import IfaceEnv
@@ -81,10 +80,10 @@ initBuiltins pkg
 
       -- From dph-common:Data.Array.Parallel.PArray.Types
       voidTyCon   <- externalTyCon        dph_PArray_Types  (fsLit "Void")
-      voidVar           <- externalVar          dph_PArray_Types  (fsLit "void")
-      fromVoidVar       <- externalVar          dph_PArray_Types  (fsLit "fromVoid")
+      voidVar     <- externalVar          dph_PArray_Types  (fsLit "void")
+      fromVoidVar <- externalVar          dph_PArray_Types  (fsLit "fromVoid")
       wrapTyCon   <- externalTyCon        dph_PArray_Types  (fsLit "Wrap")
-      sum_tcs   <- mapM (externalTyCon  dph_PArray_Types) (numbered "Sum" 2 mAX_DPH_SUM)
+      sum_tcs     <- mapM (externalTyCon  dph_PArray_Types) (numbered "Sum" 2 mAX_DPH_SUM)
 
       -- from dph-common:Data.Array.Parallel.PArray.PDataInstances
       pvoidVar          <- externalVar dph_PArray_PDataInstances  (fsLit "pvoid")
@@ -253,9 +252,7 @@ initBuiltinTyCons bi
 
   where 
     defaultTyCons :: DsM [TyCon]
-    defaultTyCons
-       = do word8 <- dsLookupTyCon word8TyConName
-            return [intTyCon, boolTyCon, floatTyCon, doubleTyCon, word8]
+    defaultTyCons = return [boolTyCon]
 
 -- |Get a list of names to `DataCon`s in the mock prelude.
 --
@@ -283,18 +280,8 @@ initBuiltinPRs (Builtins { dphModules = mods }) insts
 initBuiltinDicts :: (InstEnv, InstEnv) -> Class -> [(Name, Var)]
 initBuiltinDicts insts cls = map find $ classInstances insts cls
   where
-    find i | [Just tc] <- instanceRoughTcs i  = (tc, instanceDFunId i)
-           | otherwise        = pprPanic "Invalid DPH instance" (ppr i)
-
--- |Get a list of boxed `TyCons` in the mock prelude. This is Int only.
---
-initBuiltinBoxedTyCons :: Builtins -> DsM [(Name, TyCon)]
-initBuiltinBoxedTyCons 
-  = return . builtinBoxedTyCons
-  where 
-    builtinBoxedTyCons :: Builtins -> [(Name, TyCon)]
-    builtinBoxedTyCons _ 
-      = [(tyConName intPrimTyCon, intTyCon)]
+    find i | [Just tc] <- instanceRoughTcs i = (tc, instanceDFunId i)
+           | otherwise                       = pprPanic "Invalid DPH instance" (ppr i)
 
 
 -- Auxilliary look up functions ----------------
