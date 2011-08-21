@@ -296,7 +296,9 @@ pprTyThing :: TyThing -> SDoc
 pprTyThing thing = pprTyThingCategory thing <+> quotes (ppr (getName thing))
 
 pprTyThingCategory :: TyThing -> SDoc
-pprTyThingCategory (ATyCon _) 	= ptext (sLit "Type constructor")
+pprTyThingCategory (ATyCon tc)
+  | isClassTyCon tc = ptext (sLit "Class")
+  | otherwise       = ptext (sLit "Type constructor")
 pprTyThingCategory (ACoAxiom _) = ptext (sLit "Coercion axiom")
 pprTyThingCategory (AnId   _)   = ptext (sLit "Identifier")
 pprTyThingCategory (ADataCon _) = ptext (sLit "Data constructor")

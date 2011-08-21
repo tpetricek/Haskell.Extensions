@@ -1103,7 +1103,10 @@ isReflMkCos :: Mk [Coercion] -> Bool
 isReflMkCos = maybe False (all isReflCo) . unreturnMk_maybe
 
 mkEqVarCo :: EqVar -> Mk Coercion
-mkEqVarCo eqv = Mk [eqv] (\cvs -> case cvs of { [cv] -> mkCoVarCo cv; _ -> panic "mkEqVarCo" })
+mkEqVarCo eqv
+  | ty1 `eqType` ty2 = returnMk (Refl ty1)
+  | otherwise        = Mk [eqv] (\cvs -> case cvs of { [cv] -> CoVarCo cv; _ -> panic "mkEqVarCo" })
+  where Just (ty1, ty2) = getEqPredTys_maybe (varType eqv)
 
 mkEqVarsCos :: [EqVar] -> Mk [Coercion]
 mkEqVarsCos eqvs = Mk eqvs (map mkCoVarCo)

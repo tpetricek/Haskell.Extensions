@@ -358,7 +358,7 @@ toIfaceTyCon :: TyCon -> IfaceTyCon
 toIfaceTyCon tc 
   | isTupleTyCon tc            = IfaceTupTc (tupleTyConSort tc) (tyConArity tc)
   | isAnyTyCon tc              = IfaceAnyTc (toIfaceKind (tyConKind tc))
-  | Just n <- tyConIP_maybe tc = IfaceIPTc (fmap nameOccName n)
+  | Just n <- tyConIP_maybe tc = IfaceIPTc n
   | otherwise	               = toIfaceTyCon_name (tyConName tc)
 
 toIfaceTyCon_name :: Name -> IfaceTyCon
@@ -372,7 +372,7 @@ toIfaceWiredInTyCon :: TyCon -> Name -> IfaceTyCon
 toIfaceWiredInTyCon tc nm
   | isTupleTyCon tc                 = IfaceTupTc  (tupleTyConSort tc) (tyConArity tc)
   | isAnyTyCon tc                   = IfaceAnyTc (toIfaceKind (tyConKind tc))
-  | Just n <- tyConIP_maybe tc      = IfaceIPTc (fmap nameOccName n)
+  | Just n <- tyConIP_maybe tc      = IfaceIPTc n
   | nm == intTyConName              = IfaceIntTc
   | nm == boolTyConName             = IfaceBoolTc 
   | nm == charTyConName             = IfaceCharTc 

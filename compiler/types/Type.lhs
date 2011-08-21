@@ -155,7 +155,7 @@ import PrelNames	         ( eqTyConKey, eqPrimTyConKey )
 -- others
 import Unique		( Unique, hasKey )
 import BasicTypes	( IPName )
-import Name		( Name, nameOccName )
+import Name		( OccName )
 import NameSet
 import StaticFlags
 import Util
@@ -814,8 +814,8 @@ mkPrimEqType (ty1, ty2) = TyConApp eqPrimTyCon [ty1, ty2]
 --------------------- Implicit parameters ---------------------------------
 
 \begin{code}
-mkIPPred :: IPName Name -> Type -> PredType
-mkIPPred ip ty = TyConApp (ipTyCon (fmap nameOccName ip)) [ty]
+mkIPPred :: IPName OccName -> Type -> PredType
+mkIPPred ip ty = TyConApp (ipTyCon ip) [ty]
 \end{code}
 
 --------------------- Dictionary types ---------------------------------
@@ -870,7 +870,7 @@ Decomposing PredType
 \begin{code}
 data PredTree = ClassPred Class [Type]
               | EqPred Type Type
-              | IPPred (IPName Name) Type
+              | IPPred (IPName OccName) Type
               | TuplePred [PredTree]
               | IrredPred PredType
 

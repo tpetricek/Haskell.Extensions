@@ -363,7 +363,7 @@ ipTyDataCon n = (tycon, datacon)
                    [argAlphaTyVar]
                    []      -- No stupid theta
                    (DataTyCon [datacon] False)
-                   (IPTyCon (IPName tycon_name))
+                   (IPTyCon n)
                    NonRecursive
                    False
 

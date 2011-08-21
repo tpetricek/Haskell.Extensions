@@ -513,7 +513,7 @@ data TyConParent
 
   -- | Associated type of a implicit parameter.
   | IPTyCon
-        (IPName Name)
+        (IPName OccName)
 
   -- | An *associated* type of a class.  
   | AssocFamilyTyCon   
@@ -558,12 +558,19 @@ data TyConParent
 	-- 	axiom co a :: T [a] ~ R:TList a
 	-- with R:TList's algTcParent = FamInstTyCon T [a] co
 
+instance Outputable TyConParent where
+    ppr NoParentTyCon           = text "No parent"
+    ppr (ClassTyCon cls)        = text "Class parent" <+> ppr cls
+    ppr (IPTyCon n)             = text "IP parent" <+> ppr n
+    ppr (AssocFamilyTyCon cls)  = text "Class parent (assoc. family)" <+> ppr cls
+    ppr (FamInstTyCon tc tys _) = text "Family parent (family instance)" <+> ppr tc <+> sep (map ppr tys)
+
 -- | Checks the invariants of a 'TyConParent' given the appropriate type class name, if any
 okParent :: Name -> TyConParent -> Bool
 okParent _       NoParentTyCon                    = True
 okParent tc_name (AssocFamilyTyCon cls)           = tc_name `elem` map tyConName (classATs cls)
 okParent tc_name (ClassTyCon cls)                 = tc_name == tyConName (classTyCon cls)
-okParent tc_name (IPTyCon ip)                     = tc_name == tyConName (ipTyCon (fmap nameOccName ip))
+okParent tc_name (IPTyCon ip)                     = tc_name == tyConName (ipTyCon ip)
 okParent _       (FamInstTyCon fam_tc tys _co_tc) = tyConArity fam_tc == length tys
 
 isNoParent :: TyConParent -> Bool
@@ -804,7 +811,7 @@ mkAlgTyCon name kind tyvars stupid rhs parent is_rec gadt_syn
 	tyConTyVars	 = tyvars,
 	algTcStupidTheta = stupid,
 	algTcRhs         = rhs,
-	algTcParent	 = ASSERT( okParent name parent ) parent,
+	algTcParent	 = ASSERT2( okParent name parent, ppr name $$ ppr parent ) parent,
 	algTcRec	 = is_rec,
 	algTcGadtSyntax  = gadt_syn
     }
@@ -1330,7 +1337,7 @@ tyConClass_maybe _                                          = Nothing
 
 -- | If this 'TyCon' is that for implicit parameter, return the IP it is for.
 -- Otherwise returns @Nothing@
-tyConIP_maybe :: TyCon -> Maybe (IPName Name)
+tyConIP_maybe :: TyCon -> Maybe (IPName OccName)
 tyConIP_maybe (AlgTyCon {algTcParent = IPTyCon ip}) = Just ip
 tyConIP_maybe _                                     = Nothing
 

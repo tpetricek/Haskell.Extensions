@@ -389,7 +389,7 @@ is_improvement_pty ty = go (predTypePredTree ty)
 
 
 
-canIPToWorkList :: CtFlavor -> EvVar -> IPName Name -> TcType -> TcS WorkList
+canIPToWorkList :: CtFlavor -> EvVar -> IPName OccName -> TcType -> TcS WorkList
 -- See Note [Canonical implicit parameter constraints] to see why we don't 
 -- immediately canonicalize (flatten) IP constraints. 
 canIPToWorkList fl v nm ty 

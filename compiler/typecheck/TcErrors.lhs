@@ -272,7 +272,7 @@ reportIrredsErrs ctxt irreds orig
 %************************************************************************
 
 \begin{code}
-reportIPErrs :: ReportErrCtxt -> [(IPName Name, Type)] -> CtOrigin -> TcM ()
+reportIPErrs :: ReportErrCtxt -> [(IPName OccName, Type)] -> CtOrigin -> TcM ()
 reportIPErrs ctxt ips orig
   = addErrorReport ctxt msg
   where

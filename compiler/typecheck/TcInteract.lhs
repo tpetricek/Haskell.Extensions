@@ -142,7 +142,7 @@ extractUnsolvedCMap cmap =
 data InertSet 
   = IS { inert_eqs          :: CanonicalCts               -- Equalities only (CTyEqCan)
        , inert_dicts        :: CCanMap Class              -- Dictionaries only
-       , inert_ips          :: CCanMap (IPName Name)      -- Implicit parameters 
+       , inert_ips          :: CCanMap (IPName OccName)   -- Implicit parameters 
        , inert_irreds       :: CanonicalCts
        , inert_frozen       :: CanonicalCts
        , inert_funeqs       :: CCanMap TyCon              -- Type family equalities only
@@ -1214,7 +1214,7 @@ rewriteIrred (eqv,tv,xi) (id,gw,ty)
 
        ; mkCanonical gw id' }
 
-rewriteIP :: (EqVar,TcTyVar,Xi) -> (EvVar,CtFlavor, IPName Name, TcType) -> TcS CanonicalCt 
+rewriteIP :: (EqVar,TcTyVar,Xi) -> (EvVar,CtFlavor, IPName OccName, TcType) -> TcS CanonicalCt 
 rewriteIP (eqv,tv,xi) (ipid,gw,nm,ty) 
   = do { let ty' = substTyWith   [tv] [xi] ty
              mk_ip_co cv = liftCoSubstWith [tv] [cv] ty     -- ty[tv] ~ ty[xi]

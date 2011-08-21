@@ -182,7 +182,7 @@ tcExpr (HsIPVar ip) res_ty
 		-- type variable as its type.  (Because res_ty may not
 		-- be a tau-type.)
 	; ip_ty <- newFlexiTyVarTy argTypeKind	-- argTypeKind: it can't be an unboxed tuple
-	; ip_var <- emitWanted origin (mkIPPred ip ip_ty)
+	; ip_var <- emitWanted origin (mkIPPred (fmap nameOccName ip) ip_ty)
 	; tcWrapResult (HsIPVar (IPName ip_var)) ip_ty res_ty }
 
 tcExpr (HsLam match) res_ty

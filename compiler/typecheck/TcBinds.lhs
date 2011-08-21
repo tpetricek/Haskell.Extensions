@@ -147,7 +147,7 @@ tcLocalBinds (HsIPBinds (IPBinds ip_binds _)) thing_inside
         --              ?y = ?x + 1
     tc_ip_bind (IPBind ip expr) 
        = do { ty <- newFlexiTyVarTy argTypeKind
-            ; ip_id <- newIP ip ty
+            ; ip_id <- newIP (fmap nameOccName ip) ty
             ; expr' <- tcMonoExpr expr ty
             ; return (ip_id, (IPBind (IPName ip_id) expr')) }
 \end{code}

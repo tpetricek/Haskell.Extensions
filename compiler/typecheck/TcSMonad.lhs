@@ -152,7 +152,7 @@ data CanonicalCt
       -- See note [Canonical implicit parameter constraints].
       cc_id     :: EvVar,
       cc_flavor :: CtFlavor,
-      cc_ip_nm  :: IPName Name,
+      cc_ip_nm  :: IPName OccName,
       cc_ip_ty  :: TcTauType
     }
 
@@ -273,7 +273,7 @@ isCDictCan_Maybe :: CanonicalCt -> Maybe Class
 isCDictCan_Maybe (CDictCan {cc_class = cls })  = Just cls
 isCDictCan_Maybe _              = Nothing
 
-isCIPCan_Maybe :: CanonicalCt -> Maybe (IPName Name)
+isCIPCan_Maybe :: CanonicalCt -> Maybe (IPName OccName)
 isCIPCan_Maybe  (CIPCan {cc_ip_nm = nm }) = Just nm
 isCIPCan_Maybe _                = Nothing
 
@@ -915,7 +915,7 @@ newGivenEqVar ty1 ty2 co
 newEqVar :: TcType -> TcType -> TcS EvVar
 newEqVar ty1 ty2 = wrapTcS $ TcM.newEq ty1 ty2 
 
-newIPVar :: IPName Name -> TcType -> TcS EvVar 
+newIPVar :: IPName OccName -> TcType -> TcS EvVar 
 newIPVar nm ty = wrapTcS $ TcM.newIP nm ty 
 
 newDictVar :: Class -> [TcType] -> TcS EvVar 

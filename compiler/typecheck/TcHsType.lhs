@@ -593,7 +593,7 @@ ds_type ty@(HsAppTy _ _)
 
 ds_type (HsIParamTy n ty) = do
     tau_ty <- dsHsType ty
-    return (mkIPPred n tau_ty)
+    return (mkIPPred (fmap nameOccName n) tau_ty)
 
 ds_type (HsEqTy ty1 ty2) = do
     tau_ty1 <- dsHsType ty1
@@ -932,17 +932,17 @@ checkExpectedKind ty act_kind (EK exp_kind ek_ctxt) = do
                (env1, tidy_exp_kind) = tidyKind env0 exp_kind
                (env2, tidy_act_kind) = tidyKind env1 act_kind
 
-               err | isFactKind tidy_act_kind
+               err | n_exp_as < n_act_as     -- E.g. [Maybe]
+                   = quotes (ppr ty) <+> ptext (sLit "is not applied to enough type arguments")
+
+                     -- Now n_exp_as >= n_act_as. In the next two cases,
+                     -- n_exp_as == 0, and hence so is n_act_as
+                   | isFactKind tidy_act_kind
                    = text "Predicate" <+> quotes (ppr ty) <+> text "used as a type"
                    
                    | isFactKind tidy_exp_kind
                    = text "Type of kind " <+> ppr tidy_act_kind <+> text "used as a constraint"
                    
-                   | n_exp_as < n_act_as     -- E.g. [Maybe]
-                   = quotes (ppr ty) <+> ptext (sLit "is not applied to enough type arguments")
-
-                     -- Now n_exp_as >= n_act_as. In the next two cases,
-                     -- n_exp_as == 0, and hence so is n_act_as
                    | isLiftedTypeKind exp_kind && isUnliftedTypeKind act_kind
                    = ptext (sLit "Expecting a lifted type, but") <+> quotes (ppr ty)
                        <+> ptext (sLit "is unlifted")
