@@ -105,7 +105,8 @@ rnExpr (HsVar v)
        finishHsVar name
 
 rnExpr (HsIPVar v)
-  = return (HsIPVar (rnIPName v), emptyFVs)
+  = do v' <- rnIPName v
+       return (HsIPVar v', emptyFVs)
 
 rnExpr (HsLit lit@(HsString s))
   = do {

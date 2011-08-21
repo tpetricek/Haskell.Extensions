@@ -34,13 +34,13 @@ import RdrName
 import PrelNames
 import TysWiredIn       ( ipTyCon )
 import TysPrim          ( funTyConName )
-import TyCon            ( tyConName )
+import TyCon            ( tyConUnique )
 import Name
 import SrcLoc
 import NameSet
 
 import Util		( filterOut )
-import BasicTypes	( IPName(..), compareFixity, funTyFixity, negateFixity, 
+import BasicTypes	( IPName(..), ipNameName, compareFixity, funTyFixity, negateFixity, 
 			  Fixity(..), FixityDirection(..) )
 import Outputable
 import FastString
@@ -177,7 +177,8 @@ rnHsType doc (HsAppTy ty1 ty2) = do
 
 rnHsType doc (HsIParamTy n ty) = do
     ty' <- rnLHsType doc ty
-    return (HsIParamTy (rnIPName n) ty')
+    n' <- rnIPName n
+    return (HsIParamTy n' ty')
 
 rnHsType doc (HsEqTy ty1 ty2) = do
     ty1' <- rnLHsType doc ty1
@@ -253,8 +254,13 @@ rnContext doc = wrapLocM (rnContext' doc)
 rnContext' :: SDoc -> HsContext RdrName -> RnM (HsContext Name)
 rnContext' doc ctxt = mapM (rnLHsType doc) ctxt
 
-rnIPName :: IPName RdrName -> IPName Name
-rnIPName n = IPName (tyConName (ipTyCon (fmap rdrNameOcc n)))
+rnIPName :: IPName RdrName -> RnM (IPName Name)
+rnIPName n = do
+    loc <- getSrcSpanM
+    -- We have a nice cheat here: the Unique we assign to the Name will just be
+    -- the Unique of the corresponding TyCon
+    let tc = ipTyCon (fmap rdrNameOcc n)
+    return $ IPName (mkInternalName (tyConUnique tc) (rdrNameOcc (ipNameName n)) loc)
 \end{code}
 
 

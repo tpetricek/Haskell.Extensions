@@ -38,7 +38,6 @@ import TyCon      ( isTupleTyCon, tyConDataCons_maybe )
 import TcType
 import Type
 import Coercion
-import TysPrim    ( anyTypeOfKind )
 import TysWiredIn ( eqBoxDataCon, tupleCon )
 import CostCentre
 import Module

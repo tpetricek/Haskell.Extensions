@@ -81,7 +81,7 @@ import TyCon
 import TypeRep
 import RdrName
 import Name
-import BasicTypes       ( TupleSort(..), tupleSortBoxity, IPName(..), ipNameName, Arity, RecFlag(..), Boxity(..), isBoxed, HsBang(..) )
+import BasicTypes       ( TupleSort(..), tupleSortBoxity, IPName(..), ipNameName, Arity, RecFlag(..), Boxity(..), HsBang(..) )
 import Unique           ( incrUnique, mkIpTyConOccUnique, mkIpDataConOccUnique, mkTupleTyConUnique,
 			  mkTupleDataConUnique, mkPArrDataConUnique )
 import Data.Array
@@ -357,7 +357,7 @@ ipTyDataCon n = (tycon, datacon)
     tycon_u   = mkIpTyConOccUnique   (occNameFS (ipNameName n))
     datacon_u = mkIpDataConOccUnique (occNameFS (ipNameName n))
 
-    tycon_name = mkPrimTc (fsLit ("?" ++ occNameString (ipNameName n))) tycon_u tycon
+    tycon_name = mkPrimTyConName ('?' `consFS` occNameFS (ipNameName n)) tycon_u tycon
     tycon      = mkAlgTyCon tycon_name
                    (argTypeKind `mkArrowKind` factKind)
                    [argAlphaTyVar]

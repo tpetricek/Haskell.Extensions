@@ -9,7 +9,7 @@
 -- | This module defines TyCons that can't be expressed in Haskell. 
 --   They are all, therefore, wired-in TyCons.  C.f module TysWiredIn
 module TysPrim(
-	mkPrimTc, -- For implicit parameters in TysWiredIn only
+	mkPrimTyConName, -- For implicit parameters in TysWiredIn only
 
         tyVarList, alphaTyVars, betaTyVars, alphaTyVar, betaTyVar, gammaTyVar, deltaTyVar,
 	alphaTy, betaTy, gammaTy, deltaTy,

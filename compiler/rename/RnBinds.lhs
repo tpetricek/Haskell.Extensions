@@ -232,8 +232,9 @@ rnIPBinds (IPBinds ip_binds _no_dict_binds) = do
 
 rnIPBind :: IPBind RdrName -> RnM (IPBind Name, FreeVars)
 rnIPBind (IPBind n expr) = do
+    n' <- rnIPName n
     (expr',fvExpr) <- rnLExpr expr
-    return (IPBind (rnIPName n) expr', fvExpr)
+    return (IPBind n' expr', fvExpr)
 \end{code}
 
 
