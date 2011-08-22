@@ -1033,8 +1033,8 @@ atype :: { LHsType RdrName }
 	| tyvar				{ L1 (HsTyVar (unLoc $1)) }
 	| strict_mark atype		{ LL (HsBangTy (unLoc $1) $2) }  -- Constructor sigs only
 	| '{' fielddecls '}'		{ LL $ HsRecTy $2 }              -- Constructor sigs only
-	| '(' ctype ',' comma_types1 ')'  { LL $ HsTupleTy BoxedTuple  ($2:$4) }
-	| '(#' comma_types1 '#)'	{ LL $ HsTupleTy UnboxedTuple $2     }
+	| '(' ctype ',' comma_types1 ')'  { LL $ HsTupleTy (HsBoxyTuple placeHolderKind)  ($2:$4) }
+	| '(#' comma_types1 '#)'	{ LL $ HsTupleTy HsUnboxedTuple $2     }
 	| '[' ctype ']'			{ LL $ HsListTy  $2 }
 	| '[:' ctype ':]'		{ LL $ HsPArrTy  $2 }
 	| '(' ctype ')'		        { LL $ HsParTy   $2 }

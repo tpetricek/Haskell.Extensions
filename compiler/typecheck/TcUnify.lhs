@@ -40,7 +40,7 @@ import TcType
 import Type
 import Coercion
 import Inst
-import Kind     ( isFactKindCon )
+import Kind     ( isFactKind, isFactKindCon )
 import TyCon
 import TysWiredIn
 import Var
@@ -1237,6 +1237,7 @@ kindSimpleKind orig_swapped orig_kind
     go _ k
      | isLiftedTypeKind k   = return liftedTypeKind
      | isUnliftedTypeKind k = return unliftedTypeKind
+     | isFactKind k         = return factKind
     go _ k@(TyVarTy _) = return k -- KindVars are always simple
     go _ _ = failWithTc (ptext (sLit "Unexpected kind unification failure:")
                                   <+> ppr orig_swapped <+> ppr orig_kind)

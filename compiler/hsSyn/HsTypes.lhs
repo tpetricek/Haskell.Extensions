@@ -11,7 +11,7 @@ HsTypes: Abstract syntax: user-defined types
 module HsTypes (
 	HsType(..), LHsType, 
 	HsTyVarBndr(..), LHsTyVarBndr,
-	HsExplicitFlag(..),
+	HsTupleSort(..), HsExplicitFlag(..),
 	HsContext, LHsContext,
 	HsQuasiQuote(..),
 
@@ -148,7 +148,7 @@ data HsType name
 
   | HsPArrTy		(LHsType name)	-- Elem. type of parallel array: [:t:]
 
-  | HsTupleTy		TupleSort
+  | HsTupleTy		HsTupleSort
 			[LHsType name]	-- Element types (length gives arity)
 
   | HsOpTy		(LHsType name) (Located name) (LHsType name)
@@ -181,6 +181,10 @@ data HsType name
     	       		-- Core Type through HsSyn.  
 					 
   deriving (Data, Typeable)
+
+data HsTupleSort = HsUnboxedTuple
+                 | HsBoxyTuple Kind -- Either a Fact or normal tuple: resolved during type checking
+                 deriving (Data, Typeable)
 
 data HsExplicitFlag = Explicit | Implicit deriving (Data, Typeable)
 
@@ -440,7 +444,10 @@ ppr_mono_ty _    (HsQuasiQuoteTy qq) = ppr qq
 ppr_mono_ty _    (HsRecTy flds)      = pprConDeclFields flds
 ppr_mono_ty _    (HsTyVar name)      = ppr name
 ppr_mono_ty prec (HsFunTy ty1 ty2)   = ppr_fun_ty prec ty1 ty2
-ppr_mono_ty _    (HsTupleTy con tys) = tupleParens con (interpp'SP tys)
+ppr_mono_ty _    (HsTupleTy con tys) = tupleParens std_con (interpp'SP tys)
+  where std_con = case con of
+                    HsUnboxedTuple -> UnboxedTuple
+                    HsBoxyTuple _  -> BoxedTuple
 ppr_mono_ty _    (HsKindSig ty kind) = parens (ppr_mono_lty pREC_TOP ty <+> dcolon <+> pprKind kind)
 ppr_mono_ty _    (HsListTy ty)	     = brackets (ppr_mono_lty pREC_TOP ty)
 ppr_mono_ty _    (HsPArrTy ty)	     = pabrackets (ppr_mono_lty pREC_TOP ty)

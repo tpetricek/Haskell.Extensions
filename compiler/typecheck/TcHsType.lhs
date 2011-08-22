@@ -50,6 +50,7 @@ import NameSet
 import TysWiredIn
 import BasicTypes
 import SrcLoc
+import DynFlags ( ExtensionFlag(Opt_ConstraintKind) )
 import Util
 import UniqSupply
 import Outputable
@@ -304,18 +305,6 @@ kc_check_hs_type ty@(HsAppTy ty1 ty2) exp_kind
        ; arg_tys' <- kcCheckApps fun_ty fun_kind arg_tys ty exp_kind
        ; return (mkHsAppTys fun_ty' arg_tys') }
 
--- A hack of sorts: in the users source code, they can only write boxed
--- or unboxed tuple types. But in some contexts they really "mean" to write
--- tuples with Fact components!
---
--- This special case of kind-checking does this rewriting when we can detect
--- that we need it.
---
--- If we *infer* the kind of a tuple we always get the normal lifted tuple kind.
-kc_check_hs_type (HsTupleTy BoxedTuple tys) exp_kind@(EK kind _) | kind `eqKind` factKind = do
-    tys' <- mapM (flip kc_check_lhs_type exp_kind) tys
-    return (HsTupleTy FactTuple tys')
-
 -- This is the general case: infer the kind and compare
 kc_check_hs_type ty exp_kind
   = do	{ (ty', act_kind) <- kc_hs_type ty
@@ -380,17 +369,23 @@ kc_hs_type (HsKindSig ty k) = do
     ty' <- kc_check_lhs_type ty (EK k EkKindSig)
     return (HsKindSig ty' k, k)
 
-kc_hs_type (HsTupleTy BoxedTuple tys) = do
-    tys' <- mapM kcLiftedType tys
-    return (HsTupleTy BoxedTuple tys', liftedTypeKind)
+kc_hs_type (HsTupleTy (HsBoxyTuple _) tys) = do
+    fact_tup_ok <- xoptM Opt_ConstraintKind
+    if not fact_tup_ok
+     then do tys' <- mapM kcLiftedType tys
+             return (HsTupleTy (HsBoxyTuple liftedTypeKind) tys', liftedTypeKind)
+     else do -- In some contexts users really "mean" to write
+             -- tuples with Fact components, rather than * components.
+             --
+             -- This special case of kind-checking does this rewriting when we can detect
+             -- that we need it.
+             k <- newKindVar
+             tys' <- mapM (\ty -> kc_check_lhs_type ty (EK k EkUnk)) tys
+             return (HsTupleTy (HsBoxyTuple k) tys', k)
 
-kc_hs_type (HsTupleTy UnboxedTuple tys) = do
+kc_hs_type (HsTupleTy HsUnboxedTuple tys) = do
     tys' <- mapM kcTypeType tys
-    return (HsTupleTy UnboxedTuple tys', ubxTupleKind)
-
-kc_hs_type (HsTupleTy FactTuple tys) = do
-    tys' <- mapM (flip kc_check_lhs_type ekFact) tys
-    return (HsTupleTy FactTuple tys', factKind)
+    return (HsTupleTy HsUnboxedTuple tys', ubxTupleKind)
 
 kc_hs_type (HsFunTy ty1 ty2) = do
     ty1' <- kc_check_lhs_type ty1 (EK argTypeKind EkUnk)
@@ -571,12 +566,20 @@ ds_type (HsPArrTy ty) = do
     checkWiredInTyCon parrTyCon
     return (mkPArrTy tau_ty)
 
-ds_type (HsTupleTy boxity tys) = do
+ds_type (HsTupleTy hs_con tys) = do
+    con <- case hs_con of
+        HsUnboxedTuple -> return UnboxedTuple
+        HsBoxyTuple kind -> do
+          kind' <- zonkTcKindToKind kind
+          case () of
+            _ | kind' `eqKind` factKind       -> return FactTuple
+            _ | kind' `eqKind` liftedTypeKind -> return BoxedTuple
+            _ | otherwise
+              -> failWithTc (ptext (sLit "Unexpected tuple component kind:") <+> ppr kind')
+    let tycon = tupleTyCon con (length tys)
     tau_tys <- dsHsTypes tys
     checkWiredInTyCon tycon
     return (mkTyConApp tycon tau_tys)
-  where
-    tycon = tupleTyCon boxity (length tys)
 
 ds_type (HsFunTy ty1 ty2) = do
     tau_ty1 <- dsHsType ty1
