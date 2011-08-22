@@ -873,16 +873,21 @@ interactWithInertsStage depth workItem inert
     getISRelevant (CIPCan { cc_ip_nm = nm }) is 
       = let (relevant, residual_map) = getRelevantCts nm (inert_ips is)
         in (relevant, is { inert_ips = residual_map }) 
-    -- An equality (or CIrredEvCan), finally, may kick everything except equalities out 
+    getISRelevant (CIrredEvCan {}) is -- Irreducible, nothing is relevant! Only interacts with equalities.
+      = (emptyCCan, is)
+    -- An equality, finally, may kick everything except equalities out 
     -- because we have already interacted the equalities in interactWithInertEqsStage
     getISRelevant _eq_ct is  -- Equality, everything is relevant for this one 
                              -- TODO: if we were caching variables, we'd know that only 
                              --       some are relevant. Experiment with this for now. 
-      = let cts = cCanMapToBag (inert_ips is) `unionBags` 
-                    cCanMapToBag (inert_dicts is) `unionBags` cCanMapToBag (inert_funeqs is)
+      = let cts = cCanMapToBag (inert_ips is) `unionBags`
+                    cCanMapToBag (inert_dicts is) `unionBags`
+                    cCanMapToBag (inert_funeqs is) `unionBags`
+                    inert_irreds is
         in (cts, is { inert_dicts  = emptyCCanMap
                     , inert_ips    = emptyCCanMap
-                    , inert_funeqs = emptyCCanMap })
+                    , inert_funeqs = emptyCCanMap
+                    , inert_irreds = emptyBag })
 
 interactNext :: SubGoalDepth -> AtomicInert -> StageResult -> TcS StageResult 
 interactNext depth inert it
