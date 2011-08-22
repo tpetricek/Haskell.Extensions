@@ -254,8 +254,9 @@ dsEvTerm (EvTupleSel v n)
     v' = v `setVarType` ty_want
     xs = map mkWildValBinder tys_before ++ v' : map mkWildValBinder tys_after
     (tys_before, ty_want:tys_after) = splitAt n tys
-dsEvTerm (EvTupleMk vs) = Var (dataConWorkId dc) `mkVarApps` vs
+dsEvTerm (EvTupleMk vs) = Var (dataConWorkId dc) `mkTyApps` tys `mkVarApps` vs
   where dc = tupleCon FactTuple (length vs)
+        tys = map varType vs
 dsEvTerm (EvSuperClass d n)
   = Var sc_sel_id `mkTyApps` tys `App` Var d
   where
