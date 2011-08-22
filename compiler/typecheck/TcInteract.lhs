@@ -52,7 +52,7 @@ An InertSet is a bag of canonical constraints, with the following invariants:
     A tricky case is when there exists a given (solved) dictionary 
     constraint and a wanted identical constraint in the inert set, but do 
     not react because reaction would create loopy dictionary evidence for 
-    the wanted. See note [Recursive dictionaries]
+    the wanted. See note [Recursive instances and superclases]
 
   2 Given equalities form an idempotent substitution [none of the
     given LHS's occur in any of the given RHS's or reactant parts]
@@ -143,7 +143,7 @@ data InertSet
   = IS { inert_eqs          :: CanonicalCts               -- Equalities only (CTyEqCan)
        , inert_dicts        :: CCanMap Class              -- Dictionaries only
        , inert_ips          :: CCanMap (IPName OccName)   -- Implicit parameters 
-       , inert_irreds       :: CanonicalCts
+       , inert_irreds       :: CanonicalCts               -- Irreducible predicates
        , inert_frozen       :: CanonicalCts
        , inert_funeqs       :: CCanMap TyCon              -- Type family equalities only
                -- This representation allows us to quickly get to the relevant 
@@ -234,7 +234,7 @@ Note [Basic plan]
 
 3. Try to solve spontaneously for equalities involving touchables 
 4. Top-level interaction (binary wrt top-level)
-   Superclass decomposition belongs in (4), see note [Superclasses]
+   Superclass decomposition belongs in (1), see note [Adding superclasses]
 
 \begin{code}
 type AtomicInert = CanonicalCt     -- constraint pulled from InertSet
@@ -2039,7 +2039,7 @@ two possibilities:
        now solvable by the given Q [a]. 
  
      However, this option is restrictive, for instance [Example 3] from 
-     Note [Recursive dictionaries] will fail to work. 
+     Note [Recursive instances and superclases] will fail to work. 
 
   2. Ignore the problem, hoping that the situations where there exist indeed
      such multiple strategies are rare: Indeed the cause of the previous 
