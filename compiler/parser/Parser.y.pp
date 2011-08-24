@@ -245,6 +245,7 @@ incorrect.
  'stdcall'      { L _ ITstdcallconv }
  'ccall'        { L _ ITccallconv }
  'prim'         { L _ ITprimcallconv }
+ 'docase'   { L _ ITdocase }    -- for docase notation exptension
  'proc'		{ L _ ITproc }		-- for arrow notation extension
  'rec'		{ L _ ITrec }		-- for arrow notation extension
  'group'    { L _ ITgroup }     -- for list transform extension
@@ -286,6 +287,7 @@ incorrect.
  '>-'		{ L _ ITrarrowtail }		-- for arrow notation
  '-<<'		{ L _ ITLarrowtail }		-- for arrow notation
  '>>-'		{ L _ ITRarrowtail }		-- for arrow notation
+ '?'        { L _ ITqmark }             -- for docase notation
  '.'		{ L _ ITdot }
 
  '{'		{ L _ ITocurly } 			-- special symbols
@@ -1320,6 +1322,8 @@ exp10 :: { LHsExpr RdrName }
 
         | '{-# CORE' STRING '#-}' exp           { LL $ HsCoreAnn (getSTRING $2) $4 }
 						    -- hdaume: core annotation
+   	| 'docase' lexps 'of' docaseAltslist	{ sL (comb2 $1 $>) $ mkHsDocase (reverse (unLoc $2)) $4 }
+   	| 'docase' texp  'of' docaseAltslist	{ sL (comb2 $1 $>) $ mkHsDocase [$2] $4 }
 	| fexp					{ $1 }
 
 optSemi :: { Bool }
@@ -1566,6 +1570,32 @@ guardquals :: { Located [LStmt RdrName] }
 guardquals1 :: { Located [LStmt RdrName] }
     : guardquals1 ',' qual  { LL ($3 : unLoc $1) }
     | qual                  { L1 [$1] }
+
+-----------------------------------------------------------------------------
+-- Docase notation
+
+docaseAltslist :: { Located [LDocaseMatch RdrName] }
+	: '{'            docaseAlts '}'	{ LL (reverse (unLoc $2)) }
+	|     vocurly    docaseAlts  close	{ L (getLoc $2) (reverse (unLoc $2)) }
+
+docaseAlts   :: { Located [LDocaseMatch RdrName] }
+    : docaseAlts1				{ L1 (unLoc $1) }
+	| ';' docaseAlts			{ LL (unLoc $2) }
+
+docaseAlts1  :: { Located [LDocaseMatch RdrName] }
+	: docaseAlts1 ';' docaseAlt	{ LL ($3 : unLoc $1) }
+	| docaseAlts1 ';'			{ LL (unLoc $1) }
+	| docaseAlt				    { L1 [$1] }
+
+docaseAlt 	:: { LDocaseMatch RdrName }
+	: docasePats opt_sig '->' exp wherebinds  { sL (comb2 (mergeL $1) $>) (DocaseMatch (map unLoc $1) $2 ($4, unLoc $5)) }
+
+docasePats  :: { [Located (Maybe (LPat RdrName))] }
+    : pat ',' docasePats    { (L1 (Just $1)) : $3 }
+    | '?' ',' docasePats    { (L1 Nothing) : $3 }
+  	| pat                   { [ L1 (Just $1) ] }
+  	| '?'                   { [ L1 (Nothing) ] }
+
 
 -----------------------------------------------------------------------------
 -- Case alternatives
@@ -2026,6 +2056,9 @@ getSCC lt = do let s = getSTRING lt
 -- Utilities for combining source spans
 comb2 :: Located a -> Located b -> SrcSpan
 comb2 a b = a `seq` b `seq` combineLocs a b
+
+mergeL :: [Located a] -> Located [a]
+mergeL args = L (foldl1 combineSrcSpans (map getLoc args)) (map unLoc args)
 
 comb3 :: Located a -> Located b -> Located c -> SrcSpan
 comb3 a b c = a `seq` b `seq` c `seq`

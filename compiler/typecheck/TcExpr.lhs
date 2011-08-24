@@ -32,6 +32,7 @@ import Inst
 import TcBinds
 import TcEnv
 import TcArrows
+import TcDocase
 import TcMatches
 import TcHsType
 import TcPat
@@ -423,6 +424,9 @@ tcExpr (HsDo do_or_lc stmts _) res_ty
 tcExpr (HsProc pat cmd) res_ty
   = do	{ (pat', cmd', coi) <- tcProc pat cmd res_ty
 	; return $ mkHsWrapCo coi (HsProc pat' cmd') }
+
+tcExpr (HsDocase group) res_ty
+  = liftM HsDocase (tcDocase group res_ty)
 
 tcExpr e@(HsArrApp _ _ _ _ _) _
   = failWithTc (vcat [ptext (sLit "The arrow command"), nest 2 (ppr e), 

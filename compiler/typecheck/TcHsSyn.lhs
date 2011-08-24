@@ -53,12 +53,17 @@ import Bag
 import FastString
 import Outputable
 -- import Data.Traversable( traverse )
+
+import qualified Data.Map as Map
 \end{code}
 
 \begin{code}
 -- XXX
 thenM :: Monad a => a b -> (b -> a c) -> a c
 thenM = (>>=)
+
+liftM :: Monad m => (a -> b) -> m a -> m b
+liftM f m = m `thenM` (return . f)
 
 returnM :: Monad m => a -> m a
 returnM = return
@@ -453,7 +458,7 @@ zonkLTcSpecPrags env ps
 
 %************************************************************************
 %*									*
-\subsection[BackSubst-Match-GRHSs]{Match and GRHSs}
+\subsection[BackSubst-Match-GRHSs]{Match, GRHSs and Docase clauses}
 %*									*
 %************************************************************************
 
@@ -483,6 +488,29 @@ zonkGRHSs env (GRHSs grhss binds)
     in
     mappM (wrapLocM zonk_grhs) grhss 	`thenM` \ new_grhss ->
     returnM (GRHSs new_grhss new_binds)
+
+-------------------------------------------------------------------------
+zonkDocaseClause :: ZonkEnv -> DocaseClause TcId -> TcM (DocaseClause Id)
+
+zonkDocaseClause env (DocaseClause pats patType (clb_op, clr_op, clz_op) morelse_op body)
+  = foldrM (\(idx, pat, mzip_op) (env1, acc) ->
+        zonkPat env1 pat `thenM` \ (env2, pat') ->
+        (case mzip_op of
+          Just mzop -> liftM Just $ zonkExpr env1 mzop
+          Nothing -> return Nothing) `thenM` \ mzip_op' ->
+        returnM (env2, (idx, pat', mzip_op'):acc) ) (env, []) pats `thenM` \ (env1, pats') ->
+
+    zonkTcTypeToType env1 patType `thenM` \ patType' ->
+    zonkExpr env1 clb_op `thenM` \ clb_op' ->
+    zonkExpr env1 clr_op `thenM` \ clr_op' ->
+    zonkExpr env1 clz_op `thenM` \ clz_op' ->
+
+    zonkLExpr env1 body `thenM` \ body' ->
+    (case morelse_op of 
+      Just morp -> liftM Just $ zonkExpr env1 morp
+      Nothing -> return Nothing) `thenM` \ morelse_op' ->
+    returnM (DocaseClause pats' patType' (clb_op', clr_op', clz_op') morelse_op' body')
+
 \end{code}
 
 %************************************************************************
@@ -572,6 +600,16 @@ zonkExpr env (HsCase expr ms)
     zonkMatchGroup env ms	`thenM` \ new_ms ->
     returnM (HsCase new_expr new_ms)
 
+zonkExpr env (HsDocase (DocaseGroup args clauses bind_global_op))
+  = mapM (\(idx, (earg, (bind_op, alias_op) )) -> 
+        zonkLExpr env earg `thenM` \ earg' ->
+        zonkExpr env bind_op `thenM` \ bind_op' ->
+        zonkExpr env alias_op `thenM` \ alias_op' ->
+        returnM (idx, (earg', (bind_op', alias_op') ))) (Map.toList args) `thenM` \ largs ->
+    mapM (zonkDocaseClause env) clauses `thenM` \ clauses' ->
+    zonkExpr env bind_global_op `thenM` \ bind_global_op' ->
+    returnM (HsDocase (DocaseGroup (Map.fromList largs) clauses' bind_global_op'))
+  
 zonkExpr env (HsIf e0 e1 e2 e3)
   = do { new_e0 <- fmapMaybeM (zonkExpr env) e0
        ; new_e1 <- zonkLExpr env e1

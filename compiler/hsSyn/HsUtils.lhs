@@ -22,7 +22,7 @@ module HsUtils(
   mkHsWrap, mkLHsWrap, mkHsWrapCo, mkLHsWrapCo,
   coToHsWrapper, mkHsDictLet, mkHsLams,
   mkHsOpApp, mkHsDo, mkHsComp, mkHsWrapPat, mkHsWrapPatCo,
-  mkLHsPar, 
+  mkLHsPar, mkHsDocase,
 
   nlHsTyApp, nlHsVar, nlHsLit, nlHsApp, nlHsApps, nlHsIntLit, nlHsVarApps, 
   nlHsDo, nlHsOpApp, nlHsLam, nlHsPar, nlHsIf, nlHsCase, nlList,
@@ -90,6 +90,7 @@ import Bag
 
 import Data.Either
 import Data.Maybe
+import qualified Data.Map as Map
 \end{code}
 
 
@@ -206,6 +207,7 @@ mkHsFractional :: FractionalLit -> PostTcType -> HsOverLit id
 mkHsIsString   :: FastString -> PostTcType -> HsOverLit id
 mkHsDo         :: HsStmtContext Name -> [LStmt id] -> HsExpr id
 mkHsComp       :: HsStmtContext Name -> [LStmt id] -> LHsExpr id -> HsExpr id
+mkHsDocase     :: [LHsExpr id] -> Located [LDocaseMatch id] -> HsExpr id
 
 mkNPat      :: HsOverLit id -> Maybe (SyntaxExpr id) -> Pat id
 mkNPlusKPat :: Located id -> HsOverLit id -> Pat id
@@ -229,6 +231,19 @@ mkHsDo ctxt stmts = HsDo ctxt stmts placeHolderType
 mkHsComp ctxt stmts expr = mkHsDo ctxt (stmts ++ [last_stmt])
   where
     last_stmt = L (getLoc expr) $ mkLastStmt expr
+
+
+mkHsDocase args (L _ alts)
+  = let indices = [0 .. (length args) - 1]
+        argMap = Map.fromList $ zip indices [ (e, (noSyntaxExpr,noSyntaxExpr)) | e <- args ]
+        clauses = map (convertAlt indices) alts
+    in HsDocase (DocaseGroup argMap clauses noSyntaxExpr)
+  where 
+    -- Convert match alternative to a docase syntax
+    convertAlt indices (L _ (DocaseMatch pats _ (body, whereDecls)))  -- TODO: where bindings & optional type ignored
+      = let pats' = [ (idx, p, Just noSyntaxExpr) | (idx, Just p) <- zip indices pats ]
+        in DocaseClause pats' (error "no pat type") (noSyntaxExpr, noSyntaxExpr, noSyntaxExpr) (Just noSyntaxExpr) body 
+
 
 mkHsIf :: LHsExpr id -> LHsExpr id -> LHsExpr id -> HsExpr id
 mkHsIf c a b = HsIf (Just noSyntaxExpr) c a b

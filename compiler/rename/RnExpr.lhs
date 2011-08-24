@@ -46,6 +46,7 @@ import Outputable
 import SrcLoc
 import FastString
 import Control.Monad
+import qualified Data.Map as Map
 \end{code}
 
 
@@ -218,6 +219,42 @@ rnExpr (HsCase expr matches)
   = rnLExpr expr		 	`thenM` \ (new_expr, e_fvs) ->
     rnMatchGroup CaseAlt matches	`thenM` \ (new_matches, ms_fvs) ->
     return (HsCase new_expr new_matches, e_fvs `plusFV` ms_fvs)
+
+
+rnExpr (HsDocase (DocaseGroup args clauses bind_op)) = do {
+      -- Lookup syntax (shared by all clauses)
+    ; (morelse_op, _) <- lookupSyntaxName morelseName
+    ; (malias_op, _) <- lookupSyntaxName maliasName
+    ; (mzip_op, _) <- lookupSyntaxName mzipName        
+    ; (bind_op, _) <- lookupSyntaxName bindMName
+    ; (clret_op, _) <- lookupSyntaxName returnMName
+    ; (clzero_op, _) <- lookupSyntaxName mzeroName 
+    ; let clops = (bind_op, clret_op, clzero_op)
+
+      -- Process arguments of 'docase'
+    ; (args', fvs1) <- mapFvRn (\(idx, (e, _)) -> do {
+        ; (e', fv) <- rnLExpr e 
+        ; return ( (idx, (e', (bind_op, malias_op))), fv ) }) (Map.toList args)
+
+      -- Process clauses 
+    ; (clauses', fvs2) <- mapFvRn (rnClause mzip_op morelse_op clops) clauses
+
+      -- Reconstruct HsDocsae & fill all syntactic operations used in desugaring
+    ; return (HsDocase (DocaseGroup (Map.fromList args') clauses' bind_op), plusFVs [fvs1, fvs2] ) }
+
+  where 
+    -- Appply 'rnExpr' to the body and 'rnPat' to the patterns of a cluase
+    rnClause mzip_op morelse_op clops (DocaseClause pats _ _ _ body) = do {
+        ; rnDocasePatThen mzip_op pats [] $ \ pats' -> do {
+        ; (body', fvs) <- rnLExpr body     
+        ; return (DocaseClause pats' (error "no pat type in rn") clops (Just morelse_op) body', fvs) }}
+
+    -- Apply 'rnPat' to every pattern and fill 'mzip_op' for all zipped arguments
+    rnDocasePatThen _ [] acc cont = cont $ reverse acc
+    rnDocasePatThen mzip_op ((idx, pat, _):pats) acc cont = do {
+        ; rnPat DocaseAlt pat $ \ pat' -> 
+            rnDocasePatThen mzip_op pats ((idx, pat', Just mzip_op):acc) cont }
+
 
 rnExpr (HsLet binds expr)
   = rnLocalBindsAndThen binds		$ \ binds' ->

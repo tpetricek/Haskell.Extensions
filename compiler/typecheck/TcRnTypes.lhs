@@ -1157,6 +1157,7 @@ data CtOrigin
   | DefaultOrigin	-- Typechecking a default decl
   | DoOrigin		-- Arising from a do expression
   | MCompOrigin         -- Arising from a monad comprehension
+  | DocaseOrigin    -- Arising from a docase notation
   | IfOrigin            -- Arising from an if statement
   | ProcOrigin		-- Arising from a proc expression
   | AnnOrigin           -- An annotation
@@ -1194,6 +1195,7 @@ pprO StandAloneDerivOrigin = ptext (sLit "a 'deriving' declaration")
 pprO DefaultOrigin	   = ptext (sLit "a 'default' declaration")
 pprO DoOrigin	           = ptext (sLit "a do statement")
 pprO MCompOrigin           = ptext (sLit "a statement in a monad comprehension")
+pprO DocaseOrigin          = ptext (sLit "a docase expression")
 pprO ProcOrigin	           = ptext (sLit "a proc expression")
 pprO (TypeEqOrigin eq)     = ptext (sLit "an equality") <+> ppr eq
 pprO AnnOrigin             = ptext (sLit "an annotation")

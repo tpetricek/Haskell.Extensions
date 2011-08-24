@@ -246,6 +246,9 @@ basicKnownKeyNames
         , liftMName
         , groupMName
         , mzipName
+
+        -- Joinad stuff (reuse: bindM, returnM, mzipM from monads/comprehensions)
+        , morelseName, maliasName, mzeroName
     ]
 
 genericTyConNames :: [Name]
@@ -295,6 +298,7 @@ gHC_PRIM, gHC_TYPES, gHC_UNIT, gHC_ORDERING, gHC_GENERICS,
     gHC_ST, gHC_ARR, gHC_STABLE, gHC_PTR, gHC_ERR, gHC_REAL,
     gHC_FLOAT, gHC_TOP_HANDLER, sYSTEM_IO, dYNAMIC, tYPEABLE, tYPEABLE_INTERNAL, gENERICS,
     dOTNET, rEAD_PREC, lEX, gHC_INT, gHC_WORD, mONAD, mONAD_FIX, mONAD_GROUP, mONAD_ZIP,
+    mONAD_OR, mONAD_ALIAS,
     aRROW, cONTROL_APPLICATIVE, gHC_DESUGAR, rANDOM, gHC_EXTS,
     cONTROL_EXCEPTION_BASE :: Module
 
@@ -344,6 +348,8 @@ gHC_WORD        = mkBaseModule (fsLit "GHC.Word")
 mONAD           = mkBaseModule (fsLit "Control.Monad")
 mONAD_FIX       = mkBaseModule (fsLit "Control.Monad.Fix")
 mONAD_GROUP     = mkBaseModule (fsLit "Control.Monad.Group")
+mONAD_OR        = mkBaseModule (fsLit "Control.Monad.Or")
+mONAD_ALIAS     = mkBaseModule (fsLit "Control.Monad.Alias")
 mONAD_ZIP       = mkBaseModule (fsLit "Control.Monad.Zip")
 aRROW           = mkBaseModule (fsLit "Control.Arrow")
 cONTROL_APPLICATIVE = mkBaseModule (fsLit "Control.Applicative")
@@ -996,6 +1002,12 @@ liftMName          = varQual mONAD (fsLit "liftM") liftMIdKey
 groupMName         = varQual mONAD_GROUP (fsLit "mgroupWith") groupMIdKey
 mzipName           = varQual mONAD_ZIP (fsLit "mzip") mzipIdKey
 
+-- Docase notation for joinads
+morelseName, maliasName, mzeroName :: Name
+morelseName        = varQual mONAD_OR      (fsLit "morelse") morelseIdKey
+mzeroName          = varQual mONAD_OR      (fsLit "morzero") mzeroIdKey
+maliasName         = varQual mONAD_ALIAS   (fsLit "malias") maliasIdKey
+ 
 
 -- Annotation type checking
 toAnnotationWrapperName :: Name
@@ -1571,6 +1583,11 @@ liftMIdKey      = mkPreludeMiscIdUnique 195
 groupMIdKey     = mkPreludeMiscIdUnique 196
 mzipIdKey       = mkPreludeMiscIdUnique 197
 
+-- Docase notation for joinads
+morelseIdKey, maliasIdKey, mzeroIdKey :: Unique
+morelseIdKey    = mkPreludeMiscIdUnique 198
+maliasIdKey     = mkPreludeMiscIdUnique 199
+mzeroIdKey      = mkPreludeMiscIdUnique 188  -- TODO: running out of numbers?
 
 ---------------- Template Haskell -------------------
 --      USES IdUniques 200-499

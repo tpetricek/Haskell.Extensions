@@ -30,6 +30,7 @@ import FastString
 
 -- libraries:
 import Data.Data hiding (Fixity)
+import qualified Data.Map as Map
 \end{code}
 
 
@@ -133,6 +134,8 @@ data HsExpr id
 
   | HsCase      (LHsExpr id)
                 (MatchGroup id)
+
+  | HsDocase    (DocaseGroup id) -- 'morelse'd clauses of 'docase'
 
   | HsIf        (Maybe (SyntaxExpr id)) -- cond function
     		       		        -- Nothing => use the built-in 'if'
@@ -442,6 +445,26 @@ ppr_expr (HsLam matches)
 ppr_expr (HsCase expr matches)
   = sep [ sep [ptext (sLit "case"), nest 4 (ppr expr), ptext (sLit "of {")],
           nest 2 (pprMatches (CaseAlt :: HsMatchContext id) matches <+> char '}') ]
+ppr_expr (HsDocase (DocaseGroup args clauses _))
+  = let indices = [ 0 .. (Map.size args) ]
+    in sep [ sep [ptext (sLit "case"), nest 4 (ppr_args indices args), ptext (sLit "of {")],
+             nest 2 ((ppr_alts indices clauses) <+> char '}') ]
+ where 
+    idType :: HsExpr id -> HsMatchContext id; idType = undefined
+
+    -- Pretty print arguments of docase (separated by commas, without parens)
+    ppr_args indices args 
+      = let exprs = [ unLoc (fst (args Map.! idx)) | idx <- indices ]
+        in sep (map ppr_expr exprs)
+
+    -- Pretty print alternatives (separated by line break)
+    ppr_alts indices clauses = vcat (map (ppr_alt indices) clauses)
+
+    -- Pretty print single alternative 
+    ppr_alt indices (DocaseClause pats _ _ _ expr) =
+      let pats' = interpp'SP [ pat | (_, pat, _) <- pats ]
+      -- TODO: Need to handle '?' patterns using indices
+      in pats' <+> ptext (sLit "->") <+> ppr_expr (unLoc expr)
 
 ppr_expr (HsIf _ e1 e2 e3)
   = sep [hsep [ptext (sLit "if"), nest 2 (ppr e1), ptext (sLit "then")],
@@ -835,6 +858,52 @@ pprGRHS ctxt (GRHS guards expr)
 
 pp_rhs :: OutputableBndr idR => HsMatchContext idL -> LHsExpr idR -> SDoc
 pp_rhs ctxt rhs = matchSeparator ctxt <+> pprDeeper (ppr rhs)
+\end{code}
+
+
+%************************************************************************
+%*                                                                      *
+\subsection{Docase notation}
+%*                                                                      *
+%************************************************************************
+
+\begin{code}
+data DocaseClause id 
+  = DocaseClause                       -- non-empty list of patterns:
+        [ ( Int,                         -- index of the argument 
+            LPat id,                     -- matching pattern for that monadic imput
+            Maybe (SyntaxExpr id)) ]     -- An instance 'mzip' used to zip it with the next (last missing)
+        PostTcType                     -- Type of the composed pattern
+        ( SyntaxExpr id,               -- Tripple of operations used to desugar pattern matching
+          SyntaxExpr id,               -- (bind, return and mzero (fail) as in <e> >>= (\a -> case a of 
+          SyntaxExpr id)               --     <pat> -> return $ ...; otherwise -> mzero) )
+        (Maybe (SyntaxExpr id))        -- an instance of 'morelse' used to or it with the next
+        (LHsExpr id)                   -- body expression
+  deriving (Data, Typeable)
+
+data DocaseGroup id
+  = DocaseGroup 
+        (Map.Map Int (LHsExpr id,      -- arguments as a map of indices to
+                      ( SyntaxExpr id, --   expressions & instance of alias + bind
+                        SyntaxExpr id) )) 
+        [DocaseClause id]              -- non-empty list of clauses
+        (SyntaxExpr id)                -- the 'bind' operator used to unwrap result
+  deriving (Data, Typeable)
+
+
+-- Used only when constructing the 'docase' notation in the parser
+-- It is later transformed to DocaseClause
+
+type LDocaseMatch id = Located (DocaseMatch id)
+
+data DocaseMatch id
+  = DocaseMatch
+        [Maybe (LPat id)]               -- The patterns
+        (Maybe (LHsType id))    -- A type signature for the result of the match
+        ( LHsExpr id,           -- rhs
+          HsLocalBinds id )     -- The where clause
+  deriving (Data, Typeable)
+
 \end{code}
 
 %************************************************************************
@@ -1261,6 +1330,7 @@ data HsMatchContext id  -- Context of a Match
   = FunRhs id Bool              -- Function binding for f; True <=> written infix
   | LambdaExpr                  -- Patterns of a lambda
   | CaseAlt                     -- Patterns and guards on a case alternative
+  | DocaseAlt                   -- Patterns and guards on a docase alternative
   | ProcExpr                    -- Patterns of a proc
   | PatBindRhs                  -- A pattern binding  eg [y] <- e = e
 
@@ -1311,6 +1381,7 @@ isMonadCompExpr _                    = False
 matchSeparator :: HsMatchContext id -> SDoc
 matchSeparator (FunRhs {})  = ptext (sLit "=")
 matchSeparator CaseAlt      = ptext (sLit "->")
+matchSeparator DocaseAlt    = ptext (sLit "->")
 matchSeparator LambdaExpr   = ptext (sLit "->")
 matchSeparator ProcExpr     = ptext (sLit "->")
 matchSeparator PatBindRhs   = ptext (sLit "=")
@@ -1333,6 +1404,7 @@ pprMatchContextNoun :: Outputable id => HsMatchContext id -> SDoc
 pprMatchContextNoun (FunRhs fun _)  = ptext (sLit "equation for")
                                       <+> quotes (ppr fun)
 pprMatchContextNoun CaseAlt         = ptext (sLit "case alternative")
+pprMatchContextNoun DocaseAlt       = ptext (sLit "docase alternative")
 pprMatchContextNoun RecUpd          = ptext (sLit "record-update construct")
 pprMatchContextNoun ThPatQuote      = ptext (sLit "Template Haskell pattern quotation")
 pprMatchContextNoun PatBindRhs      = ptext (sLit "pattern binding")
@@ -1381,6 +1453,7 @@ pprStmtContext (TransStmtCtxt c)
 matchContextErrString :: Outputable id => HsMatchContext id -> SDoc
 matchContextErrString (FunRhs fun _)             = ptext (sLit "function") <+> ppr fun
 matchContextErrString CaseAlt                    = ptext (sLit "case")
+matchContextErrString DocaseAlt                  = ptext (sLit "docase")
 matchContextErrString PatBindRhs                 = ptext (sLit "pattern binding")
 matchContextErrString RecUpd                     = ptext (sLit "record update")
 matchContextErrString LambdaExpr                 = ptext (sLit "lambda")

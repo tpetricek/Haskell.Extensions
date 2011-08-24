@@ -274,6 +274,7 @@ Library
         DsArrows
         DsBinds
         DsCCall
+        DsDocase
         DsExpr
         DsForeign
         DsGRHSs
@@ -390,6 +391,7 @@ Library
         TcClassDcl
         TcDefaults
         TcDeriv
+        TcDocase
         TcEnv
         TcExpr
         TcForeign

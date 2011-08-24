@@ -24,6 +24,7 @@ import DsGRHSs
 import DsListComp
 import DsUtils
 import DsArrows
+import DsDocase
 import DsMonad
 import Name
 import NameEnv
@@ -581,6 +582,9 @@ dsExpr (HsSpliceE s)       = pprPanic "dsExpr:splice" (ppr s)
 
 -- Arrow notation extension
 dsExpr (HsProc pat cmd) = dsProcExpr pat cmd
+
+-- Docase notation extension
+dsExpr (HsDocase group) = dsDocaseExpr group
 \end{code}
 
 Hpc Support 

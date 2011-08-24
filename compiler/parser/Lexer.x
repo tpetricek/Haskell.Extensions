@@ -569,6 +569,10 @@ data Token
   | ITLarrowtail                --  -<<
   | ITRarrowtail                --  >>-
 
+  -- Docase notation extension
+  | ITqmark                     -- ? pattern
+  | ITdocase
+
   | ITunknown String            -- Used when the lexer can't make sense of it
   | ITeof                       -- end of file token
 
@@ -631,6 +635,9 @@ reservedWordsFM = listToUFM $
          ( "by",             ITby,            bit transformComprehensionsBit),
          ( "using",          ITusing,         bit transformComprehensionsBit),
 
+
+         ( "docase",         ITdocase,        bit docaseNotationBit),    
+
          ( "foreign",        ITforeign,       bit ffiBit),
          ( "export",         ITexport,        bit ffiBit),
          ( "label",          ITlabel,         bit ffiBit),
@@ -674,6 +681,8 @@ reservedSymsFM = listToUFM $
        ,(">-",  ITrarrowtail, arrowsEnabled)
        ,("-<<", ITLarrowtail, arrowsEnabled)
        ,(">>-", ITRarrowtail, arrowsEnabled)
+
+       ,("?",   ITqmark, docaseNotation)
 
        ,("∷",   ITdcolon, unicodeSyntaxEnabled)
        ,("⇒",   ITdarrow, unicodeSyntaxEnabled)
@@ -1781,6 +1790,8 @@ nondecreasingIndentationBit :: Int
 nondecreasingIndentationBit = 25
 safeHaskellBit :: Int
 safeHaskellBit = 26
+docaseNotationBit :: Int
+docaseNotationBit = 27
 
 always :: Int -> Bool
 always           _     = True
@@ -1822,6 +1833,8 @@ relaxedLayout :: Int -> Bool
 relaxedLayout flags = testBit flags relaxedLayoutBit
 nondecreasingIndentation :: Int -> Bool
 nondecreasingIndentation flags = testBit flags nondecreasingIndentationBit
+docaseNotation :: Int -> Bool
+docaseNotation flags = testBit flags docaseNotationBit
 
 -- PState for parsing options pragmas
 --
@@ -1878,6 +1891,8 @@ mkPState flags buf loc =
                .|. relaxedLayoutBit            `setBitIf` xopt Opt_RelaxedLayout            flags
                .|. nondecreasingIndentationBit `setBitIf` xopt Opt_NondecreasingIndentation flags
                .|. safeHaskellBit              `setBitIf` safeHaskellOn                     flags
+               .|. docaseNotationBit           `setBitIf` xopt Opt_DocaseNotation           flags
+
       --
       setBitIf :: Int -> Bool -> Int
       b `setBitIf` cond | cond      = bit b

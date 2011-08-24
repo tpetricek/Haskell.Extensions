@@ -407,6 +407,7 @@ data ExtensionFlag
    | Opt_ParallelListComp
    | Opt_TransformListComp
    | Opt_MonadComprehensions
+   | Opt_DocaseNotation
    | Opt_GeneralizedNewtypeDeriving
    | Opt_RecursiveDo
    | Opt_DoRec
@@ -1829,6 +1830,7 @@ xFlags = [
   ( "ParallelListComp",                 AlwaysAllowed, Opt_ParallelListComp, nop ),
   ( "TransformListComp",                AlwaysAllowed, Opt_TransformListComp, nop ),
   ( "MonadComprehensions",              AlwaysAllowed, Opt_MonadComprehensions, nop),
+  ( "DocaseNotation",                   AlwaysAllowed, Opt_DocaseNotation, nop ),
   ( "ForeignFunctionInterface",   RestrictedFunction, Opt_ForeignFunctionInterface, nop ),
   ( "UnliftedFFITypes",                 AlwaysAllowed, Opt_UnliftedFFITypes, nop ),
   ( "InterruptibleFFI",                 AlwaysAllowed, Opt_InterruptibleFFI, nop ),

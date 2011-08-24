@@ -308,6 +308,34 @@ addTickHsExpr (HsDo cxt stmts srcloc)
 	forQual = case cxt of
 		    ListComp -> Just $ BinBox QualBinBox
 		    _        -> Nothing
+
+addTickHsExpr (HsDocase (DocaseGroup args clauses bind)) =
+    liftM HsDocase 
+        (liftM3 DocaseGroup
+            (addTickDocaseArgs args)
+            (mapM addTickDocaseClause clauses)
+            (addTickSyntaxExpr hpcSrcSpan bind) )
+  where
+    addTickDocaseArgs args = 
+        liftM Map.fromList $
+            mapM (\(idx, (expr, (synBind, synAlias))) -> do {
+                ; expr' <- addTickLHsExprAlways expr
+                ; synAlias' <- addTickSyntaxExpr hpcSrcSpan synAlias
+                ; synBind' <- addTickSyntaxExpr hpcSrcSpan synBind
+                ; return (idx, (expr', (synBind', synAlias'))) }) (Map.toList args)
+    addTickDocaseClause (DocaseClause pats ty (synBind, synRet, synZero) (Just synMorelse) body) = do {
+        ; pats' <- mapM (\ (idx, pat, Just mzip) -> do {
+            ; pat' <- addTickLPat pat
+            ; mzip' <- addTickSyntaxExpr hpcSrcSpan mzip
+            ; return (idx, pat', Just mzip') }) pats
+        ; body' <- addTickLHsExprAlways body
+		; synBind' <- addTickSyntaxExpr hpcSrcSpan synBind
+		; synRet' <- addTickSyntaxExpr hpcSrcSpan synRet
+		; synZero' <- addTickSyntaxExpr hpcSrcSpan synZero
+		; synMorelse' <- addTickSyntaxExpr hpcSrcSpan synMorelse
+        ; return $ DocaseClause pats' ty (synBind', synRet', synZero') (Just synMorelse') body' }
+
+          
 addTickHsExpr (ExplicitList ty es) = 
 	liftM2 ExplicitList
 		(return ty)
